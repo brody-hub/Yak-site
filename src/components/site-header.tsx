@@ -14,6 +14,8 @@ const titles: Record<string, string> = {
   "/settings/user-management": "User management",
   "/settings/theme": "Theme",
   "/settings/discord": "Discord",
+  "/settings/integrations": "Integrations",
+  "/settings/documentation": "Documentation",
 }
 
 function getTitle(pathname: string) {

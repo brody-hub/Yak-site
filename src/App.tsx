@@ -3,7 +3,11 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom
 import { AuthProvider } from "@/components/auth-provider"
 import { DiscordWebhooksProvider } from "@/components/discord-webhooks-provider"
 import { KpisProvider } from "@/components/kpis-provider"
-import { RequireAuth, RequirePermission } from "@/components/route-guards"
+import {
+  RequireAuth,
+  RequireCanManageUsers,
+  RequirePermission,
+} from "@/components/route-guards"
 import { SystemUsersProvider } from "@/components/system-users-provider"
 import { TasksProvider } from "@/components/tasks-provider"
 import { Toaster } from "@/components/ui/sonner"
@@ -18,6 +22,8 @@ import { ResetPasswordPage } from "@/pages/reset-password-page"
 import { TasksPage } from "@/pages/tasks-page"
 import { SystemUserDetailPage } from "@/pages/system-user-detail-page"
 import { DiscordWebhooksPage } from "@/pages/discord-webhooks-page"
+import { DocumentationPage } from "@/pages/documentation-page"
+import { IntegrationsPage } from "@/pages/integrations-page"
 import { ThemePage } from "@/pages/theme-page"
 import { UserManagementPage } from "@/pages/user-management-page"
 import { UsersPage } from "@/pages/users-page"
@@ -110,6 +116,16 @@ export function App() {
                       />
                     </Route>
                   </Route>
+                  <Route element={<RequireCanManageUsers />}>
+                    <Route
+                      path="settings/integrations"
+                      element={<IntegrationsPage />}
+                    />
+                  </Route>
+                  <Route
+                    path="settings/documentation"
+                    element={<DocumentationPage />}
+                  />
                 </Route>
               </Route>
             </Route>

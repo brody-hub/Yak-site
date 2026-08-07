@@ -2,9 +2,11 @@ import * as React from "react"
 import { Link } from "react-router-dom"
 import {
   ActivityIcon,
+  BookOpenIcon,
   ChartBarIcon,
   CommandIcon,
   HeadphonesIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
   MessageCircleIcon,
@@ -81,6 +83,16 @@ const support = [
   },
 ] satisfies { name: string; url: string; icon: React.ReactNode; permission: PanelPermissionId }[]
 
+type SettingsNavItem = {
+  name: string
+  url: string
+  icon: React.ReactNode
+  /** Panel section permission. Omit for pages open to every signed-in user. */
+  permission?: PanelPermissionId
+  /** Owner/admin only — matches server API-key management. */
+  requireManageUsers?: boolean
+}
+
 const settings = [
   {
     name: "User management",
@@ -100,17 +112,38 @@ const settings = [
     icon: <MessageCircleIcon />,
     permission: "discord",
   },
-] satisfies { name: string; url: string; icon: React.ReactNode; permission: PanelPermissionId }[]
+  {
+    name: "Integrations",
+    url: "/settings/integrations",
+    icon: <KeyRoundIcon />,
+    requireManageUsers: true,
+  },
+  {
+    name: "Documentation",
+    url: "/settings/documentation",
+    icon: <BookOpenIcon />,
+  },
+] satisfies SettingsNavItem[]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { name, logo } = useBranding()
-  const { user, can } = useAuth()
+  const { user, can, canManageUsers } = useAuth()
 
   // Sections the signed-in user cannot open are hidden rather than disabled;
   // the route guards enforce the same rule if someone types the URL.
   const visibleMain = navMain.filter((item) => can(item.permission))
   const visibleSupport = support.filter((item) => can(item.permission))
-  const visibleSettings = settings.filter((item) => can(item.permission))
+  const visibleSettings = settings.filter((item) => {
+    if (item.requireManageUsers) {
+      return canManageUsers
+    }
+
+    if (item.permission) {
+      return can(item.permission)
+    }
+
+    return true
+  })
 
   return (
     <Sidebar collapsible="icon" {...props}>

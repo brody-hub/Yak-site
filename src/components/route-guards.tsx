@@ -65,6 +65,26 @@ export function RequirePermission({
   return <Navigate to={permissionPath(fallback)} replace />
 }
 
+/**
+ * Gates owner/admin-only surfaces (API keys, etc.). Matches the server's
+ * canMintApiKeys / canManageUsers checks rather than a panel permission.
+ */
+export function RequireCanManageUsers() {
+  const { canManageUsers, user } = useAuth()
+
+  if (canManageUsers) {
+    return <Outlet />
+  }
+
+  const fallback = user?.effectivePermissions[0]
+
+  if (!fallback) {
+    return <NoAccessPage />
+  }
+
+  return <Navigate to={permissionPath(fallback)} replace />
+}
+
 function NoAccessPage() {
   const { user, signOut } = useAuth()
 
