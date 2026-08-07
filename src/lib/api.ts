@@ -688,28 +688,38 @@ export const apiKeysApi = {
 /* -------------------------------------------------------------------------- */
 
 export const uploadsApi = {
-  status: () => get<{ imagesConfigured: boolean }>("/api/uploads/status"),
+  status: () =>
+    get<{ uploadsConfigured: boolean; imagesConfigured: boolean }>(
+      "/api/uploads/status"
+    ),
 
   /**
-   * Uploads straight to Cloudflare with a one-time URL minted by our API, so
-   * the file never passes through the backend. Returns the id to persist
-   * against a profile or the theme settings.
+   * Uploads straight to Cloudflare R2 with a short-lived presigned PUT URL
+   * minted by our API, so the file never passes through the backend. Returns
+   * the object key to persist against a profile or the theme settings.
    */
   async uploadImage(
     file: File,
     purpose: "avatar" | "branding"
   ): Promise<string> {
-    const { uploadUrl, imageId } = (
-      await request<{ uploadUrl: string; imageId: string }>(
-        "/api/uploads/direct-upload",
-        { method: "POST", body: { purpose } }
-      )
+    const contentType = file.type || "image/jpeg"
+    const { uploadUrl, imageId, method, headers } = (
+      await request<{
+        uploadUrl: string
+        imageId: string
+        method: "PUT"
+        headers: { "Content-Type": string }
+      }>("/api/uploads/direct-upload", {
+        method: "POST",
+        body: { purpose, contentType },
+      })
     ).data
 
-    const form = new FormData()
-    form.append("file", file)
-
-    const response = await fetch(uploadUrl, { method: "POST", body: form })
+    const response = await fetch(uploadUrl, {
+      method: method ?? "PUT",
+      body: file,
+      headers: headers ?? { "Content-Type": contentType },
+    })
 
     if (!response.ok) {
       throw new ApiError(

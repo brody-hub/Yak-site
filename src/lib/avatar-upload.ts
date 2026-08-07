@@ -45,9 +45,9 @@ export async function uploadAvatarFile(file: File) {
     throw new Error("Choose an image file")
   }
 
-  const { imagesConfigured } = await uploadsApi.status()
+  const { uploadsConfigured, imagesConfigured } = await uploadsApi.status()
 
-  if (imagesConfigured) {
+  if (uploadsConfigured || imagesConfigured) {
     const imageId = await uploadsApi.uploadImage(file, "avatar")
     return meApi.setAvatar({ imageId })
   }
