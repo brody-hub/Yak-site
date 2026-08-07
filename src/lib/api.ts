@@ -317,11 +317,14 @@ export const meApi = {
         body: { currentPassword, newPassword },
       })
     ).data,
-  setAvatar: async (imageId: string | null) =>
+  setAvatar: async (body: {
+    imageId?: string | null
+    dataUrl?: string | null
+  }) =>
     (
       await request<CurrentUser>("/api/me/avatar", {
         method: "PUT",
-        body: { imageId },
+        body,
       })
     ).data,
   activity: () => get<ServerActivityEntry[]>("/api/me/activity"),

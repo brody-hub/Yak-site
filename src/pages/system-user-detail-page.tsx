@@ -16,6 +16,7 @@ import { useSystemUsers } from "@/components/system-users-provider"
 import { UserAvatar } from "@/components/user-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { removeAvatar, uploadAvatarFile } from "@/lib/avatar-upload"
 import {
   Card,
   CardContent,
@@ -55,11 +56,14 @@ export function SystemUserDetailPage() {
     deactivateUser,
     reactivateUser,
     resendInvite,
+    syncUser,
     loading,
   } = useSystemUsers()
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, setUser: setCurrentUser } = useAuth()
   const [editAccessOpen, setEditAccessOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = React.useState(false)
+  const avatarInputRef = React.useRef<HTMLInputElement>(null)
 
   const user = userId ? getUser(userId) : undefined
 
@@ -99,6 +103,30 @@ export function SystemUserDetailPage() {
     }
   }
 
+  const onAvatarPicked = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+
+    if (!file) {
+      return
+    }
+
+    setUploadingAvatar(true)
+
+    try {
+      const updated = await uploadAvatarFile(file)
+      setCurrentUser(updated)
+      syncUser(updated)
+      toast.success("Avatar updated")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not upload that image"
+      )
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
       <div className="flex flex-col gap-4 px-4 lg:px-6">
@@ -115,7 +143,48 @@ export function SystemUserDetailPage() {
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <UserAvatar user={user} size="lg" />
+                <div className="flex flex-col items-center gap-2">
+                  <UserAvatar user={user} size="lg" />
+                  {isSelf ? (
+                    <div className="flex flex-wrap justify-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingAvatar}
+                        onClick={() => avatarInputRef.current?.click()}
+                      >
+                        {uploadingAvatar ? "Uploading…" : "Change photo"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={uploadingAvatar}
+                        onClick={() =>
+                          void removeAvatar()
+                            .then((updated) => {
+                              setCurrentUser(updated)
+                              syncUser(updated)
+                              toast.success("Photo removed")
+                            })
+                            .catch(() =>
+                              toast.error("Could not remove your photo")
+                            )
+                        }
+                      >
+                        Remove
+                      </Button>
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => void onAvatarPicked(event)}
+                      />
+                    </div>
+                  ) : null}
+                </div>
                 <div className="space-y-1.5">
                   <CardTitle className="flex items-center gap-2">
                     {user.name}

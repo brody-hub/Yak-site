@@ -46,6 +46,8 @@ type SystemUsersProviderState = {
   removeUser: (userId: string) => Promise<void>
   getUser: (id: string) => ServerSystemUser | undefined
   getUserActivity: (userId: string) => ServerActivityEntry[]
+  /** Merges a fresher user record into the roster (e.g. after avatar upload). */
+  syncUser: (user: ServerSystemUser) => void
 }
 
 const SystemUsersContext = React.createContext<
@@ -85,7 +87,7 @@ export function SystemUsersProvider({ children }: SystemUsersProviderProps) {
     void refresh()
   }, [refresh])
 
-  const replaceUser = React.useCallback((updated: ServerSystemUser) => {
+  const syncUser = React.useCallback((updated: ServerSystemUser) => {
     setUsers((current) =>
       current.map((user) => (user.id === updated.id ? updated : user))
     )
@@ -107,24 +109,24 @@ export function SystemUsersProvider({ children }: SystemUsersProviderProps) {
       }
     ) => {
       const updated = await systemUsersApi.update(userId, patch)
-      replaceUser(updated)
+      syncUser(updated)
       return updated
     },
-    [replaceUser]
+    [syncUser]
   )
 
   const deactivateUser = React.useCallback(
     async (userId: string, reason?: string) => {
-      replaceUser(await systemUsersApi.deactivate(userId, reason))
+      syncUser(await systemUsersApi.deactivate(userId, reason))
     },
-    [replaceUser]
+    [syncUser]
   )
 
   const reactivateUser = React.useCallback(
     async (userId: string) => {
-      replaceUser(await systemUsersApi.reactivate(userId))
+      syncUser(await systemUsersApi.reactivate(userId))
     },
-    [replaceUser]
+    [syncUser]
   )
 
   const resendInvite = React.useCallback(
@@ -163,6 +165,7 @@ export function SystemUsersProvider({ children }: SystemUsersProviderProps) {
       removeUser,
       getUser,
       getUserActivity,
+      syncUser,
     }),
     [
       users,
@@ -178,6 +181,7 @@ export function SystemUsersProvider({ children }: SystemUsersProviderProps) {
       removeUser,
       getUser,
       getUserActivity,
+      syncUser,
     ]
   )
 

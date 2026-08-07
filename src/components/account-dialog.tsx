@@ -18,7 +18,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { ApiError, meApi, uploadsApi } from "@/lib/api"
+import { useSystemUsers } from "@/components/system-users-provider"
+import { ApiError, meApi } from "@/lib/api"
+import { removeAvatar, uploadAvatarFile } from "@/lib/avatar-upload"
 import { getInitials } from "@/lib/panel-permissions"
 import { PASSWORD_MIN_LENGTH } from "@/pages/change-password-page"
 
@@ -30,6 +32,7 @@ export function AccountDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { user, setUser, changePassword } = useAuth()
+  const { syncUser } = useSystemUsers()
 
   const [name, setName] = React.useState(user?.name ?? "")
   const [savingName, setSavingName] = React.useState(false)
@@ -74,22 +77,32 @@ export function AccountDialog({
     }
   }
 
+  const applyAvatar = (updated: typeof user) => {
+    if (!updated) {
+      return
+    }
+
+    setUser(updated)
+    syncUser(updated)
+  }
+
   const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ""
 
-    if (!file || !file.type.startsWith("image/")) {
+    if (!file) {
       return
     }
 
     setUploading(true)
 
     try {
-      const imageId = await uploadsApi.uploadImage(file, "avatar")
-      setUser(await meApi.setAvatar(imageId))
+      applyAvatar(await uploadAvatarFile(file))
       toast.success("Avatar updated")
-    } catch {
-      toast.error("Could not upload that image")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not upload that image"
+      )
     } finally {
       setUploading(false)
     }
@@ -153,10 +166,10 @@ export function AccountDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  disabled={uploading}
                   onClick={() =>
-                    void meApi
-                      .setAvatar(null)
-                      .then(setUser)
+                    void removeAvatar()
+                      .then(applyAvatar)
                       .catch(() => toast.error("Could not remove your photo"))
                   }
                 >
