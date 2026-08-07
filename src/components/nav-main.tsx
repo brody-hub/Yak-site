@@ -4,6 +4,7 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
@@ -15,6 +16,7 @@ export function NavMain({
     title: string
     url: string
     icon?: React.ReactNode
+    badge?: string
   }[]
 }) {
   const location = useLocation()
@@ -41,6 +43,11 @@ export function NavMain({
                     <span>{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
+                {item.badge ? (
+                  <SidebarMenuBadge className="text-[10px] tracking-wide text-muted-foreground">
+                    {item.badge}
+                  </SidebarMenuBadge>
+                ) : null}
               </SidebarMenuItem>
             )
           })}

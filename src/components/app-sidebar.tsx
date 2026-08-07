@@ -35,12 +35,16 @@ const navMain = [
     url: "/",
     icon: <LayoutDashboardIcon />,
     permission: "dashboard",
+    // TEMP: remove when real data is wired up
+    badge: "[DEMO DATA]",
   },
   {
     title: "KPIs",
     url: "/kpis",
     icon: <ChartBarIcon />,
     permission: "kpis",
+    // TEMP: remove when real data is wired up
+    badge: "[DEMO DATA]",
   },
   {
     title: "Tasks",
@@ -48,7 +52,13 @@ const navMain = [
     icon: <ListChecksIcon />,
     permission: "tasks",
   },
-] satisfies { title: string; url: string; icon: React.ReactNode; permission: PanelPermissionId }[]
+] satisfies {
+  title: string
+  url: string
+  icon: React.ReactNode
+  permission: PanelPermissionId
+  badge?: string
+}[]
 
 const support = [
   {
