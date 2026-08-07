@@ -702,13 +702,13 @@ export const uploadsApi = {
     file: File,
     purpose: "avatar" | "branding"
   ): Promise<string> {
-    const contentType = file.type || "image/jpeg"
+    const contentType = await resolveImageContentType(file)
     const { uploadUrl, imageId, method, headers } = (
       await request<{
         uploadUrl: string
         imageId: string
         method: "PUT"
-        headers: { "Content-Type": string }
+        headers: Record<string, string>
       }>("/api/uploads/direct-upload", {
         method: "POST",
         body: { purpose, contentType },
@@ -718,7 +718,10 @@ export const uploadsApi = {
     const response = await fetch(uploadUrl, {
       method: method ?? "PUT",
       body: file,
-      headers: headers ?? { "Content-Type": contentType },
+      headers: {
+        "Content-Type": contentType,
+        ...headers,
+      },
     })
 
     if (!response.ok) {
@@ -731,4 +734,65 @@ export const uploadsApi = {
 
     return imageId
   },
+}
+
+/** Prefer `file.type`, then sniff magic bytes, then fall back by extension. */
+async function resolveImageContentType(file: File): Promise<string> {
+  const typed = file.type.trim().toLowerCase()
+  if (typed === "image/jpg" || typed === "image/pjpeg") return "image/jpeg"
+  if (typed === "image/x-png") return "image/png"
+  if (
+    typed === "image/jpeg" ||
+    typed === "image/png" ||
+    typed === "image/webp" ||
+    typed === "image/gif"
+  ) {
+    return typed
+  }
+
+  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer())
+  if (
+    header.length >= 8 &&
+    header[0] === 0x89 &&
+    header[1] === 0x50 &&
+    header[2] === 0x4e &&
+    header[3] === 0x47
+  ) {
+    return "image/png"
+  }
+  if (
+    header.length >= 3 &&
+    header[0] === 0xff &&
+    header[1] === 0xd8 &&
+    header[2] === 0xff
+  ) {
+    return "image/jpeg"
+  }
+  if (
+    header.length >= 6 &&
+    header[0] === 0x47 &&
+    header[1] === 0x49 &&
+    header[2] === 0x46
+  ) {
+    return "image/gif"
+  }
+  if (
+    header.length >= 12 &&
+    header[0] === 0x52 &&
+    header[1] === 0x49 &&
+    header[2] === 0x46 &&
+    header[3] === 0x46 &&
+    header[8] === 0x57 &&
+    header[9] === 0x45 &&
+    header[10] === 0x42 &&
+    header[11] === 0x50
+  ) {
+    return "image/webp"
+  }
+
+  const name = file.name.toLowerCase()
+  if (name.endsWith(".png")) return "image/png"
+  if (name.endsWith(".webp")) return "image/webp"
+  if (name.endsWith(".gif")) return "image/gif"
+  return "image/jpeg"
 }
