@@ -13,6 +13,10 @@ import { toast } from "sonner"
 import { useAuth } from "@/components/auth-provider"
 import { EditAccessDialog } from "@/components/edit-access-dialog"
 import { useSystemUsers } from "@/components/system-users-provider"
+import {
+  TemporaryPasswordDialog,
+  type TemporaryPasswordDetails,
+} from "@/components/temporary-password-dialog"
 import { UserAvatar } from "@/components/user-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -63,6 +67,8 @@ export function SystemUserDetailPage() {
   const [editAccessOpen, setEditAccessOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const [uploadingAvatar, setUploadingAvatar] = React.useState(false)
+  const [inviteCredentials, setInviteCredentials] =
+    React.useState<TemporaryPasswordDetails | null>(null)
   const avatarInputRef = React.useRef<HTMLInputElement>(null)
 
   const user = userId ? getUser(userId) : undefined
@@ -211,10 +217,33 @@ export function SystemUserDetailPage() {
                       size="sm"
                       disabled={busy}
                       onClick={() =>
-                        void run(
-                          () => resendInvite(user.id),
-                          "Invite resent"
-                        )
+                        void (async () => {
+                          setBusy(true)
+                          try {
+                            const result = await resendInvite(user.id)
+                            if (result.inviteEmailSent) {
+                              toast.success(`Invite emailed to ${user.email}`)
+                            }
+                            if (result.temporaryPassword) {
+                              setInviteCredentials({
+                                userName: user.name,
+                                userEmail: user.email,
+                                inviteEmailSent: result.inviteEmailSent,
+                                temporaryPassword: result.temporaryPassword,
+                              })
+                            } else {
+                              toast.success("Invite resent")
+                            }
+                          } catch (error) {
+                            toast.error(
+                              error instanceof ApiError
+                                ? error.message
+                                : "Could not resend invite"
+                            )
+                          } finally {
+                            setBusy(false)
+                          }
+                        })()
                       }
                     >
                       Resend invite
@@ -384,6 +413,16 @@ export function SystemUserDetailPage() {
             "Section access updated"
           )
         }
+      />
+
+      <TemporaryPasswordDialog
+        open={Boolean(inviteCredentials)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setInviteCredentials(null)
+          }
+        }}
+        details={inviteCredentials}
       />
     </div>
   )

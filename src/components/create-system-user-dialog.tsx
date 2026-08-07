@@ -1,7 +1,7 @@
 import * as React from "react"
-import { CheckIcon, CopyIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { TemporaryPasswordDialog } from "@/components/temporary-password-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -112,14 +112,10 @@ export function CreateSystemUserDialog({
       })
 
       if (invite.inviteEmailSent) {
-        toast.success(`Invite sent to ${invite.user.email}`)
-        reset()
-        onOpenChange(false)
-        return
+        toast.success(`Invite emailed to ${invite.user.email}`)
       }
 
-      // Email is not configured on this deployment, so the temporary password
-      // has to be handed over manually.
+      // Always show the temp password so the admin can copy and send it too.
       setResult(invite)
     } catch (caught) {
       setError(
@@ -133,232 +129,181 @@ export function CreateSystemUserDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          reset()
-        }
-        onOpenChange(nextOpen)
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
-        {result ? (
-          <TemporaryPasswordPanel
-            result={result}
-            onDone={() => {
-              reset()
-              onOpenChange(false)
-            }}
-          />
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Invite panel user</DialogTitle>
-              <DialogDescription>
-                They receive an email with a temporary password and must choose
-                a new one on first sign in.
-              </DialogDescription>
-            </DialogHeader>
-
-            <form
-              onSubmit={(event) => void handleSubmit(event)}
-              className="space-y-5"
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="system-user-name">Name</Label>
-                  <Input
-                    id="system-user-name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Jordan Lee"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="system-user-email">Email</Label>
-                  <Input
-                    id="system-user-email"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="jordan@stand.app"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="system-user-role">Role</Label>
-                <Select
-                  value={role}
-                  onValueChange={(value) => setRole(value as UserRole)}
-                >
-                  <SelectTrigger id="system-user-role" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLE_OPTIONS.filter(
-                      (option) => option.id !== "admin" || canGrantAdmin
-                    ).map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-muted-foreground text-xs">
-                  {ROLE_OPTIONS.find((option) => option.id === role)
-                    ?.description}
-                </p>
-              </div>
-
-              {needsPermissions && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label>Permissions</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setPermissions(
-                          permissions.length === PANEL_PERMISSIONS.length
-                            ? []
-                            : PANEL_PERMISSIONS.map(
-                                (permission) => permission.id
-                              )
-                        )
-                      }
-                    >
-                      {permissions.length === PANEL_PERMISSIONS.length
-                        ? "Clear all"
-                        : "Select all"}
-                    </Button>
-                  </div>
-
-                  <div className="space-y-4 rounded-xl border p-4">
-                    {permissionGroups.map((group) => {
-                      const groupPermissions = PANEL_PERMISSIONS.filter(
-                        (permission) => permission.group === group
-                      )
-
-                      return (
-                        <div key={group} className="space-y-2">
-                          <p className="text-muted-foreground text-xs font-medium">
-                            {group}
-                          </p>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {groupPermissions.map((permission) => (
-                              <label
-                                key={permission.id}
-                                htmlFor={`permission-${permission.id}`}
-                                className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm"
-                              >
-                                <Checkbox
-                                  id={`permission-${permission.id}`}
-                                  checked={permissions.includes(permission.id)}
-                                  onCheckedChange={(value) =>
-                                    togglePermission(
-                                      permission.id,
-                                      value === true
-                                    )
-                                  }
-                                />
-                                <span>{permission.label}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {error ? (
-                <p className="text-destructive text-sm" role="alert">
-                  {error}
-                </p>
-              ) : null}
-
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={!canSubmit || submitting}>
-                  {submitting ? "Sending…" : "Send invite"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/** Fallback for deployments without an email provider configured. */
-function TemporaryPasswordPanel({
-  result,
-  onDone,
-}: {
-  result: InviteResult
-  onDone: () => void
-}) {
-  const [copied, setCopied] = React.useState(false)
-  const password = result.temporaryPassword ?? ""
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(password)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      toast.error("Could not copy to the clipboard")
-    }
-  }
-
-  return (
     <>
-      <DialogHeader>
-        <DialogTitle>Share this temporary password</DialogTitle>
-        <DialogDescription>
-          Email is not configured on this deployment, so the invite could not be
-          sent. Give {result.user.name} this password — it is shown only once.
-        </DialogDescription>
-      </DialogHeader>
+      <Dialog
+        open={open && !result}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            reset()
+          }
+          onOpenChange(nextOpen)
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Invite panel user</DialogTitle>
+            <DialogDescription>
+              Creates an invite-only account. You&apos;ll get a temporary
+              password to share; they must choose a new one on first sign in.
+            </DialogDescription>
+          </DialogHeader>
 
-      <div className="space-y-2">
-        <Label htmlFor="temporary-password">Temporary password</Label>
-        <div className="flex gap-2">
-          <Input
-            id="temporary-password"
-            readOnly
-            value={password}
-            className="font-mono"
-            onFocus={(event) => event.currentTarget.select()}
-          />
-          <Button type="button" variant="outline" onClick={() => void copy()}>
-            {copied ? <CheckIcon /> : <CopyIcon />}
-            {copied ? "Copied" : "Copy"}
-          </Button>
-        </div>
-        <p className="text-muted-foreground text-xs">
-          They will be asked to choose their own password when they sign in.
-        </p>
-      </div>
+          <form
+            onSubmit={(event) => void handleSubmit(event)}
+            className="space-y-5"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="system-user-name">Name</Label>
+                <Input
+                  id="system-user-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Jordan Lee"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="system-user-email">Email</Label>
+                <Input
+                  id="system-user-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="jordan@stand.app"
+                  required
+                />
+              </div>
+            </div>
 
-      <DialogFooter>
-        <Button type="button" onClick={onDone}>
-          Done
-        </Button>
-      </DialogFooter>
+            <div className="space-y-2">
+              <Label htmlFor="system-user-role">Role</Label>
+              <Select
+                value={role}
+                onValueChange={(value) => setRole(value as UserRole)}
+              >
+                <SelectTrigger id="system-user-role" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.filter(
+                    (option) => option.id !== "admin" || canGrantAdmin
+                  ).map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                {ROLE_OPTIONS.find((option) => option.id === role)?.description}
+              </p>
+            </div>
+
+            {needsPermissions && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>Permissions</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setPermissions(
+                        permissions.length === PANEL_PERMISSIONS.length
+                          ? []
+                          : PANEL_PERMISSIONS.map(
+                              (permission) => permission.id
+                            )
+                      )
+                    }
+                  >
+                    {permissions.length === PANEL_PERMISSIONS.length
+                      ? "Clear all"
+                      : "Select all"}
+                  </Button>
+                </div>
+
+                <div className="space-y-4 rounded-xl border p-4">
+                  {permissionGroups.map((group) => {
+                    const groupPermissions = PANEL_PERMISSIONS.filter(
+                      (permission) => permission.group === group
+                    )
+
+                    return (
+                      <div key={group} className="space-y-2">
+                        <p className="text-muted-foreground text-xs font-medium">
+                          {group}
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {groupPermissions.map((permission) => (
+                            <label
+                              key={permission.id}
+                              htmlFor={`permission-${permission.id}`}
+                              className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+                            >
+                              <Checkbox
+                                id={`permission-${permission.id}`}
+                                checked={permissions.includes(permission.id)}
+                                onCheckedChange={(value) =>
+                                  togglePermission(
+                                    permission.id,
+                                    value === true
+                                  )
+                                }
+                              />
+                              <span>{permission.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {error ? (
+              <p className="text-destructive text-sm" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!canSubmit || submitting}>
+                {submitting ? "Sending…" : "Send invite"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <TemporaryPasswordDialog
+        open={Boolean(result)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            reset()
+            onOpenChange(false)
+          }
+        }}
+        details={
+          result?.temporaryPassword
+            ? {
+                userName: result.user.name,
+                userEmail: result.user.email,
+                inviteEmailSent: result.inviteEmailSent,
+                temporaryPassword: result.temporaryPassword,
+              }
+            : null
+        }
+      />
     </>
   )
 }
