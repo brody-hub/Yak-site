@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom
 
 import { AuthProvider } from "@/components/auth-provider"
 import { DiscordWebhooksProvider } from "@/components/discord-webhooks-provider"
+import { DashboardProvider } from "@/components/dashboard-provider"
 import { IntegrationsProvider } from "@/components/integrations-provider"
 import {
   RequireAuth,
@@ -34,7 +35,7 @@ import { UsersPage } from "@/pages/users-page"
  *
  * The panel roster is needed almost everywhere (assignee pickers, avatars) and
  * integration status gates dashboard widgets and KPIs, so both are global.
- * Tasks and Discord are scoped to their own routes.
+ * Dashboard, Tasks, and Discord are scoped to their own routes.
  */
 function PanelProviders() {
   return (
@@ -43,6 +44,14 @@ function PanelProviders() {
         <Outlet />
       </IntegrationsProvider>
     </SystemUsersProvider>
+  )
+}
+
+function DashboardRoute() {
+  return (
+    <DashboardProvider>
+      <Outlet />
+    </DashboardProvider>
   )
 }
 
@@ -75,7 +84,9 @@ export function App() {
               <Route element={<PanelProviders />}>
                 <Route element={<DashboardLayout />}>
                   <Route element={<RequirePermission permission="dashboard" />}>
-                    <Route index element={<DashboardPage />} />
+                    <Route element={<DashboardRoute />}>
+                      <Route index element={<DashboardPage />} />
+                    </Route>
                   </Route>
                   <Route element={<RequirePermission permission="users" />}>
                     <Route path="users" element={<UsersPage />} />
