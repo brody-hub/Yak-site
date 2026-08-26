@@ -18,7 +18,10 @@ import type {
 } from "@/lib/tasks"
 import type { AnalyticsEvent, DailyEventPoint, EventNameStat } from "@/lib/analytics"
 import type { AppUser } from "@/lib/app-users"
+import type { DashboardWidget } from "@/lib/dashboard"
 import type { DiscordTriggerId } from "@/lib/discord-webhooks"
+import type { IntegrationProviderId } from "@/lib/integrations"
+import type { KpiChartName, KpiOverview, KpiTrend } from "@/lib/kpis"
 
 export const API_URL = (
   import.meta.env.VITE_API_URL ?? "http://localhost:8080"
@@ -496,6 +499,8 @@ export const reportsApi = {
     type?: ReportType
     status?: ReportStatus
     search?: string
+    /** Excludes resolved and closed reports, matching the inbox default. */
+    openOnly?: boolean
     limit?: number
     offset?: number
   }) =>
@@ -503,6 +508,7 @@ export const reportsApi = {
       type: params?.type,
       status: params?.status,
       search: params?.search,
+      openOnly: params?.openOnly,
       limit: params?.limit ?? 100,
       offset: params?.offset ?? 0,
     }),
@@ -573,12 +579,103 @@ export const analyticsApi = {
 /* App users                                                                   */
 /* -------------------------------------------------------------------------- */
 
+export type AppUserStats = {
+  windowDays: number
+  total: number
+  active: number
+  trialing: number
+  churned: number
+  paid: number
+  plans: { free: number; plus: number; pro: number }
+  newInWindow: number
+}
+
 export const appUsersApi = {
   search: (query: string) => get<AppUser[]>("/api/app-users", { q: query }),
+  stats: (days = 7) => get<AppUserStats>("/api/app-users/stats", { days }),
   detail: (externalId: string) =>
     get<{ user: AppUser; reports: SupportReport[] }>(
       `/api/app-users/${encodeURIComponent(externalId)}`
     ),
+}
+
+/* -------------------------------------------------------------------------- */
+/* Provider integrations                                                       */
+/* -------------------------------------------------------------------------- */
+
+export type ServerIntegration = {
+  provider: IntegrationProviderId
+  label: string
+  capabilities: string[]
+  connected: boolean
+  /** Non secret fragment. Null for users who cannot manage integrations. */
+  apiKeyHint: string | null
+  projectId: string | null
+  projectName: string | null
+  connectedAt: string | null
+  lastCheckedAt: string | null
+  lastError: string | null
+}
+
+export const integrationsApi = {
+  list: () => get<ServerIntegration[]>("/api/integrations"),
+
+  /** The key is write-only: no endpoint ever returns it after this call. */
+  connectRevenueCat: async (input: { apiKey: string; projectId?: string }) =>
+    (
+      await request<ServerIntegration>("/api/integrations/revenuecat", {
+        method: "PUT",
+        body: input,
+      })
+    ).data,
+
+  testRevenueCat: async () =>
+    (
+      await request<{
+        ok: true
+        metricsAvailable: number
+        currency: string
+      }>("/api/integrations/revenuecat/test", { method: "POST" })
+    ).data,
+
+  disconnectRevenueCat: async () =>
+    (
+      await request<ServerIntegration>("/api/integrations/revenuecat", {
+        method: "DELETE",
+      })
+    ).data,
+}
+
+/* -------------------------------------------------------------------------- */
+/* KPIs                                                                        */
+/* -------------------------------------------------------------------------- */
+
+export const kpisApi = {
+  overview: () => get<KpiOverview>("/api/kpis/overview"),
+  trend: (chart: KpiChartName, days = 30) =>
+    get<KpiTrend>("/api/kpis/trend", { chart, days }),
+  charts: () => get<{ id: KpiChartName; label: string }[]>("/api/kpis/charts"),
+}
+
+/* -------------------------------------------------------------------------- */
+/* Dashboard                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type ServerDashboardLayout = {
+  /** Null when the user has never configured a dashboard. */
+  widgets: DashboardWidget[] | null
+  updatedAt: string | null
+}
+
+export const dashboardApi = {
+  layout: () => get<ServerDashboardLayout>("/api/dashboard/layout"),
+  saveLayout: async (widgets: DashboardWidget[]) =>
+    (
+      await request<{ widgets: DashboardWidget[]; updatedAt: string | null }>(
+        "/api/dashboard/layout",
+        { method: "PUT", body: { widgets } }
+      )
+    ).data,
 }
 
 /* -------------------------------------------------------------------------- */

@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom
 
 import { AuthProvider } from "@/components/auth-provider"
 import { DiscordWebhooksProvider } from "@/components/discord-webhooks-provider"
-import { KpisProvider } from "@/components/kpis-provider"
+import { IntegrationsProvider } from "@/components/integrations-provider"
 import {
   RequireAuth,
   RequireCanManageUsers,
@@ -32,15 +32,16 @@ import { UsersPage } from "@/pages/users-page"
  * Providers that load data from the API. They sit inside the auth guard so a
  * signed-out visitor never triggers a request that would just 401.
  *
- * The panel roster is needed almost everywhere (assignee pickers, avatars), so
- * it is global. Tasks and Discord are scoped to their own routes.
+ * The panel roster is needed almost everywhere (assignee pickers, avatars) and
+ * integration status gates dashboard widgets and KPIs, so both are global.
+ * Tasks and Discord are scoped to their own routes.
  */
 function PanelProviders() {
   return (
     <SystemUsersProvider>
-      <KpisProvider>
+      <IntegrationsProvider>
         <Outlet />
-      </KpisProvider>
+      </IntegrationsProvider>
     </SystemUsersProvider>
   )
 }

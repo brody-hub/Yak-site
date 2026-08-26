@@ -7,6 +7,8 @@ import {
   ApiKeySecretDialog,
   type ApiKeySecretDetails,
 } from "@/components/api-key-secret-dialog"
+import { IntegrationCard } from "@/components/integration-card"
+import { useIntegrations } from "@/components/integrations-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,11 +43,14 @@ import {
   apiKeysApi,
   type ApiKeySummary,
 } from "@/lib/api"
+import { INTEGRATION_PROVIDERS } from "@/lib/integrations"
 import { formatDateTime } from "@/lib/kpis"
 
 type ScopeOption = { id: string; description: string }
 
 export function IntegrationsPage() {
+  const { get: getIntegration, refresh: refreshIntegrations } =
+    useIntegrations()
   const [keys, setKeys] = React.useState<ApiKeySummary[]>([])
   const [scopes, setScopes] = React.useState<ScopeOption[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -152,11 +157,31 @@ export function IntegrationsPage() {
 
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+      <div className="space-y-1 px-4 lg:px-6">
+        <h1 className="text-lg font-semibold tracking-tight">Integrations</h1>
+        <p className="text-muted-foreground text-sm">
+          Connect the services Stand reads metrics from, and mint the keys your
+          app uses to send data in.
+        </p>
+      </div>
+
+      {/* Inbound: services Stand reads from, using a key you paste here. */}
+      {INTEGRATION_PROVIDERS.map((provider) => (
+        <div key={provider.id} className="px-4 lg:px-6">
+          <IntegrationCard
+            provider={provider}
+            integration={getIntegration(provider.id)}
+            onChange={refreshIntegrations}
+          />
+        </div>
+      ))}
+
+      {/* Outbound: keys your app uses to call this deployment's ingest API. */}
       <div className="px-4 lg:px-6">
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
             <div className="space-y-1.5">
-              <CardTitle>Integrations</CardTitle>
+              <CardTitle>Ingest API keys</CardTitle>
               <CardDescription>
                 Generate API keys for your app to send reports, events, and user
                 sync into Stand. See{" "}
