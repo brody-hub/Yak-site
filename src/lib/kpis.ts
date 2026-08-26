@@ -1,50 +1,17 @@
+/**
+ * Subscription KPIs, sourced from the RevenueCat integration.
+ *
+ * Every value here comes from `/api/kpis/*`. When RevenueCat is not connected
+ * the server reports `connected: false` with empty metrics rather than failing,
+ * so the UI shows a connect prompt instead of an error.
+ */
+
 export type KpiSectionId =
   | "overview"
-  | "subscribers"
+  | "subscriptions"
   | "trials"
-  | "active"
-  | "churn"
+  | "customers"
   | "revenue"
-  | "connection"
-
-export type KpiProviderId = "revenuecat" | "superwall"
-
-export type KpiConnection = {
-  provider: KpiProviderId
-  apiKey: string
-  connectedAt: string | null
-}
-
-export type KpiConnections = Record<KpiProviderId, KpiConnection>
-
-export type DailyMetricPoint = {
-  date: string
-  subscribers: number
-  trials: number
-  revenue: number
-  churn: number
-}
-
-export type SubscriberEvent = {
-  id: string
-  name: string
-  email: string
-  product: string
-  plan: string
-  status: "active" | "trialing" | "cancelled" | "expired"
-  amount: number
-  startedAt: string
-}
-
-export type TrialEvent = {
-  id: string
-  name: string
-  email: string
-  product: string
-  daysLeft: number
-  converted: boolean | null
-  startedAt: string
-}
 
 export const KPI_SECTIONS: {
   id: KpiSectionId
@@ -57,245 +24,171 @@ export const KPI_SECTIONS: {
     description: "Snapshot of subscription health",
   },
   {
-    id: "subscribers",
-    label: "New subscribers",
-    description: "Recent paid conversions",
+    id: "subscriptions",
+    label: "Subscriptions",
+    description: "Active paying customers",
   },
   {
     id: "trials",
     label: "Trials",
-    description: "Trial starts and conversions",
+    description: "Trials in flight right now",
   },
   {
-    id: "active",
-    label: "Active subscriptions",
-    description: "Current paying customers",
-  },
-  {
-    id: "churn",
-    label: "Churn",
-    description: "Cancellations and expirations",
+    id: "customers",
+    label: "Customers",
+    description: "Acquisition and active users",
   },
   {
     id: "revenue",
     label: "Revenue",
-    description: "MRR, ARR, and proceeds",
-  },
-  {
-    id: "connection",
-    label: "Connection",
-    description: "API keys for RevenueCat & Superwall",
+    description: "MRR, ARR, and trailing proceeds",
   },
 ]
 
-export const DEFAULT_KPI_CONNECTIONS: KpiConnections = {
-  revenuecat: {
-    provider: "revenuecat",
-    apiKey: "rc_demo_sk_stand_8f3a2c91",
-    connectedAt: "2026-08-01T12:00:00.000Z",
-  },
-  superwall: {
-    provider: "superwall",
-    apiKey: "",
-    connectedAt: null,
-  },
+/** Time series RevenueCat can chart. Mirrors `REVENUECAT_CHARTS` on the server. */
+export const KPI_CHARTS = [
+  "revenue",
+  "mrr",
+  "active_subscriptions",
+  "new_customers",
+  "active_trials",
+  "trials_conversion",
+  "churned_subscriptions",
+] as const
+
+export type KpiChartName = (typeof KPI_CHARTS)[number]
+
+export const KPI_CHART_LABELS: Record<KpiChartName, string> = {
+  revenue: "Revenue",
+  mrr: "MRR",
+  active_subscriptions: "Active subscriptions",
+  new_customers: "New customers",
+  active_trials: "Active trials",
+  trials_conversion: "Trial conversion",
+  churned_subscriptions: "Churned subscriptions",
 }
 
-export const KPI_CONNECTIONS_STORAGE_KEY = "kpi-connections"
+/** Charts whose values are money, so they format as currency. */
+const CURRENCY_CHARTS: KpiChartName[] = ["revenue", "mrr"]
 
-export const DEMO_SUMMARY = {
-  mrr: 48250,
-  arr: 579000,
-  activeSubscriptions: 3842,
-  newSubscribers7d: 186,
-  newSubscribersChange: 12.4,
-  trialsStarted7d: 412,
-  trialConversionRate: 28.6,
-  churnRate: 3.2,
-  churned7d: 47,
-  refunds7d: 9,
-  revenue7d: 18420,
-  revenueChange: 8.1,
+export function isCurrencyChart(chart: KpiChartName) {
+  return CURRENCY_CHARTS.includes(chart)
 }
 
-export const DEMO_TREND: DailyMetricPoint[] = [
-  { date: "2026-07-31", subscribers: 22, trials: 48, revenue: 2100, churn: 6 },
-  { date: "2026-08-01", subscribers: 28, trials: 52, revenue: 2450, churn: 5 },
-  { date: "2026-08-02", subscribers: 19, trials: 41, revenue: 1980, churn: 8 },
-  { date: "2026-08-03", subscribers: 31, trials: 63, revenue: 2890, churn: 4 },
-  { date: "2026-08-04", subscribers: 27, trials: 58, revenue: 2640, churn: 7 },
-  { date: "2026-08-05", subscribers: 35, trials: 71, revenue: 3120, churn: 9 },
-  { date: "2026-08-06", subscribers: 24, trials: 79, revenue: 3240, churn: 8 },
-]
+export type KpiMetric = {
+  id: string
+  name: string
+  description: string | null
+  /** `$` for money, `#` for counts, `%` for rates. */
+  unit: string
+  /** ISO 8601 duration the value covers. `P0D` means "as of now". */
+  period: string
+  value: number | null
+  lastUpdatedAt: string | null
+}
 
-export const DEMO_SUBSCRIBERS: SubscriberEvent[] = [
-  {
-    id: "s1",
-    name: "Maya Chen",
-    email: "maya@example.com",
-    product: "Stand Pro",
-    plan: "Annual",
-    status: "active",
-    amount: 79.99,
-    startedAt: "2026-08-06T14:22:00.000Z",
-  },
-  {
-    id: "s2",
-    name: "Noah Patel",
-    email: "noah@example.com",
-    product: "Stand Pro",
-    plan: "Monthly",
-    status: "active",
-    amount: 9.99,
-    startedAt: "2026-08-06T11:05:00.000Z",
-  },
-  {
-    id: "s3",
-    name: "Sofia Alvarez",
-    email: "sofia@example.com",
-    product: "Stand Plus",
-    plan: "Monthly",
-    status: "active",
-    amount: 4.99,
-    startedAt: "2026-08-05T20:41:00.000Z",
-  },
-  {
-    id: "s4",
-    name: "Liam Brooks",
-    email: "liam@example.com",
-    product: "Stand Pro",
-    plan: "Annual",
-    status: "active",
-    amount: 79.99,
-    startedAt: "2026-08-05T16:18:00.000Z",
-  },
-  {
-    id: "s5",
-    name: "Ava Nguyen",
-    email: "ava@example.com",
-    product: "Stand Plus",
-    plan: "Annual",
-    status: "active",
-    amount: 39.99,
-    startedAt: "2026-08-04T09:55:00.000Z",
-  },
-  {
-    id: "s6",
-    name: "Ethan Cole",
-    email: "ethan@example.com",
-    product: "Stand Pro",
-    plan: "Monthly",
-    status: "active",
-    amount: 9.99,
-    startedAt: "2026-08-03T22:10:00.000Z",
-  },
-]
+export type KpiSummary = {
+  mrr: number | null
+  arr: number | null
+  revenue: number | null
+  activeSubscriptions: number | null
+  activeTrials: number | null
+  newCustomers: number | null
+  activeUsers: number | null
+  arpu: number | null
+}
 
-export const DEMO_TRIALS: TrialEvent[] = [
+export type KpiOverview = {
+  connected: boolean
+  currency: string
+  fetchedAt: string | null
+  summary: KpiSummary
+  metrics: KpiMetric[]
+}
+
+export type KpiTrendPoint = { date: string; value: number }
+
+export type KpiTrend = {
+  connected: boolean
+  /** False when the project's plan does not expose chart data. */
+  available: boolean
+  chart: KpiChartName
+  resolution: "day" | "week" | "month" | null
+  points: KpiTrendPoint[]
+}
+
+export type KpiSummaryKey = keyof KpiSummary
+
+/** Stat tiles a dashboard widget or KPI section can render from the summary. */
+export const KPI_SUMMARY_METRICS: {
+  key: KpiSummaryKey
+  label: string
+  hint: string
+  format: "currency" | "number"
+}[] = [
   {
-    id: "tr1",
-    name: "Harper Diaz",
-    email: "harper@example.com",
-    product: "Stand Pro",
-    daysLeft: 5,
-    converted: null,
-    startedAt: "2026-08-06T08:12:00.000Z",
+    key: "mrr",
+    label: "MRR",
+    hint: "Monthly recurring revenue",
+    format: "currency",
   },
   {
-    id: "tr2",
-    name: "Owen Kim",
-    email: "owen@example.com",
-    product: "Stand Plus",
-    daysLeft: 2,
-    converted: null,
-    startedAt: "2026-08-05T19:40:00.000Z",
+    key: "arr",
+    label: "ARR",
+    hint: "MRR annualised",
+    format: "currency",
   },
   {
-    id: "tr3",
-    name: "Isla Freya",
-    email: "isla@example.com",
-    product: "Stand Pro",
-    daysLeft: 0,
-    converted: true,
-    startedAt: "2026-07-30T13:00:00.000Z",
+    key: "revenue",
+    label: "Revenue",
+    hint: "Trailing 28 days",
+    format: "currency",
   },
   {
-    id: "tr4",
-    name: "Jack Morgan",
-    email: "jack@example.com",
-    product: "Stand Pro",
-    daysLeft: 0,
-    converted: false,
-    startedAt: "2026-07-29T10:25:00.000Z",
+    key: "arpu",
+    label: "ARPU",
+    hint: "MRR per active subscription",
+    format: "currency",
   },
   {
-    id: "tr5",
-    name: "Nora Wells",
-    email: "nora@example.com",
-    product: "Stand Plus",
-    daysLeft: 6,
-    converted: null,
-    startedAt: "2026-08-06T15:33:00.000Z",
+    key: "activeSubscriptions",
+    label: "Active subscriptions",
+    hint: "Paying customers right now",
+    format: "number",
   },
   {
-    id: "tr6",
-    name: "Caleb Stone",
-    email: "caleb@example.com",
-    product: "Stand Pro",
-    daysLeft: 1,
-    converted: null,
-    startedAt: "2026-08-04T07:48:00.000Z",
+    key: "activeTrials",
+    label: "Active trials",
+    hint: "Trials in flight",
+    format: "number",
+  },
+  {
+    key: "newCustomers",
+    label: "New customers",
+    hint: "Trailing 28 days",
+    format: "number",
+  },
+  {
+    key: "activeUsers",
+    label: "Active users",
+    hint: "Trailing 28 days",
+    format: "number",
   },
 ]
 
-export const DEMO_CHURN: SubscriberEvent[] = [
-  {
-    id: "c1",
-    name: "Riley Quinn",
-    email: "riley@example.com",
-    product: "Stand Pro",
-    plan: "Monthly",
-    status: "cancelled",
-    amount: 9.99,
-    startedAt: "2026-08-06T10:00:00.000Z",
-  },
-  {
-    id: "c2",
-    name: "Sam Ortiz",
-    email: "sam@example.com",
-    product: "Stand Plus",
-    plan: "Annual",
-    status: "expired",
-    amount: 39.99,
-    startedAt: "2026-08-05T18:20:00.000Z",
-  },
-  {
-    id: "c3",
-    name: "Taylor Reed",
-    email: "taylor@example.com",
-    product: "Stand Pro",
-    plan: "Monthly",
-    status: "cancelled",
-    amount: 9.99,
-    startedAt: "2026-08-04T12:45:00.000Z",
-  },
-  {
-    id: "c4",
-    name: "Jamie Fox",
-    email: "jamie@example.com",
-    product: "Stand Plus",
-    plan: "Monthly",
-    status: "cancelled",
-    amount: 4.99,
-    startedAt: "2026-08-03T21:05:00.000Z",
-  },
-]
+export function getKpiSummaryMetric(key: string) {
+  return KPI_SUMMARY_METRICS.find((metric) => metric.key === key)
+}
 
-export function formatCurrency(value: number) {
+/* -------------------------------------------------------------------------- */
+/* Formatting                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export function formatCurrency(value: number, currency = "USD") {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: value >= 1000 ? 0 : 2,
+    currency,
+    maximumFractionDigits: Math.abs(value) >= 1000 ? 0 : 2,
   }).format(value)
 }
 
@@ -315,18 +208,68 @@ export function formatDateTime(value: string) {
   }).format(new Date(value))
 }
 
-export function maskApiKey(key: string) {
-  if (!key) {
-    return ""
-  }
-
-  if (key.length <= 8) {
-    return "••••••••"
-  }
-
-  return `${key.slice(0, 6)}${"•".repeat(Math.min(12, key.length - 10))}${key.slice(-4)}`
+export function formatShortDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })
 }
 
-export function isConnected(connection: KpiConnection) {
-  return Boolean(connection.apiKey.trim() && connection.connectedAt)
+/** Em dash for a metric RevenueCat has no value for, rather than a bare zero. */
+export function formatMetricValue(
+  value: number | null,
+  format: "currency" | "number" | "percent",
+  currency = "USD"
+) {
+  if (value === null) {
+    return "—"
+  }
+
+  if (format === "currency") {
+    return formatCurrency(value, currency)
+  }
+
+  if (format === "percent") {
+    return `${value.toFixed(1)}%`
+  }
+
+  return formatNumber(value)
+}
+
+/**
+ * Formats a raw RevenueCat metric using the unit the provider reported, so
+ * metrics we do not model explicitly still render sensibly.
+ */
+export function formatRawMetric(metric: KpiMetric, currency: string) {
+  if (metric.value === null) {
+    return "—"
+  }
+
+  if (metric.unit === "$") {
+    return formatCurrency(metric.value, currency)
+  }
+
+  if (metric.unit === "%") {
+    return `${metric.value.toFixed(1)}%`
+  }
+
+  return formatNumber(metric.value)
+}
+
+/** Turns `P28D` into "Last 28 days" for a metric caption. */
+export function describePeriod(period: string) {
+  if (period === "P0D") {
+    return "As of now"
+  }
+
+  const match = /^P(\d+)([DWMY])$/.exec(period)
+
+  if (!match) {
+    return period
+  }
+
+  const amount = Number(match[1])
+  const unit = { D: "day", W: "week", M: "month", Y: "year" }[match[2] ?? "D"]
+
+  return `Last ${amount} ${unit}${amount === 1 ? "" : "s"}`
 }

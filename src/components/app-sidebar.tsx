@@ -37,16 +37,12 @@ const navMain = [
     url: "/",
     icon: <LayoutDashboardIcon />,
     permission: "dashboard",
-    // TEMP: remove when real data is wired up
-    badge: "[DEMO DATA]",
   },
   {
     title: "KPIs",
     url: "/kpis",
     icon: <ChartBarIcon />,
     permission: "kpis",
-    // TEMP: remove when real data is wired up
-    badge: "[DEMO DATA]",
   },
   {
     title: "Tasks",
