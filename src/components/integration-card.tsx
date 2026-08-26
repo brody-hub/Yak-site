@@ -3,7 +3,6 @@ import {
   CheckCircle2Icon,
   ExternalLinkIcon,
   EyeOffIcon,
-  ShieldCheckIcon,
   Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -248,18 +247,6 @@ export function IntegrationCard({
                   </li>
                 ))}
               </ol>
-            </div>
-
-            <div className="space-y-2 rounded-xl border p-4">
-              <h3 className="flex items-center gap-2 text-sm font-medium">
-                <ShieldCheckIcon className="size-4" />
-                How Stand keeps it safe
-              </h3>
-              <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
-                {provider.security.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
             </div>
 
             <form onSubmit={(event) => void connect(event)} className="space-y-3">

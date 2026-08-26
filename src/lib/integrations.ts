@@ -25,8 +25,6 @@ export type IntegrationProvider = {
   docsUrl: string
   /** Walkthrough rendered on the integrations page. */
   steps: IntegrationStep[]
-  /** Handling rules worth stating explicitly next to a credential field. */
-  security: string[]
 }
 
 export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
@@ -65,13 +63,6 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
         title: "Confirm the connection",
         body: "Stand verifies the key against RevenueCat before storing it and resolves which project it can read. If the key is wrong or under-permissioned you will see the error immediately.",
       },
-    ],
-    security: [
-      "The key is encrypted with AES-256-GCM before it is written to the database.",
-      "No endpoint in this panel ever returns the key. After you save it, only a short hint such as sk_ab…9f21 is displayed.",
-      "Nobody can read the key back — to change it, paste a replacement; to revoke access, remove the connection here and delete the key in RevenueCat.",
-      "Only owners and admins can add, replace, or remove a connection.",
-      "Use a key scoped to read-only metrics permissions so a leak cannot alter your RevenueCat data.",
     ],
   },
 ]
