@@ -52,8 +52,8 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
         body: "Choose “New secret key”, name it something you will recognise later such as “Stand panel”, and keep it a V2 key. V1 keys cannot read metrics.",
       },
       {
-        title: "Grant read-only metrics permissions",
-        body: "Enable charts_metrics:overview:read and project_configuration:projects:read. Leave every write permission off — Stand never modifies anything in RevenueCat.",
+        title: "Turn on every Read permission",
+        body: "In the V2 key form, enable Read on every permission group — Charts & Metrics, Project Configuration, Customer Information, and the rest. A key with only one or two read scopes is rejected. Leave every Write permission off; Stand never modifies anything in RevenueCat.",
       },
       {
         title: "Copy the key once and paste it below",
