@@ -108,10 +108,20 @@ export type KpiOverview = {
 
 export type KpiTrendPoint = { date: string; value: number }
 
+export type KpiTrendFailureReason =
+  | "permission"
+  | "rate_limited"
+  | "unavailable"
+  | "unreachable"
+
 export type KpiTrend = {
   connected: boolean
-  /** False when the project's plan does not expose chart data. */
+  /** False when RevenueCat could not supply the series; see `reason`. */
   available: boolean
+  /** Why the series is missing. Null when it is available or not connected. */
+  reason: KpiTrendFailureReason | null
+  /** Server supplied explanation, safe to show verbatim. */
+  message: string | null
   chart: KpiChartName
   resolution: "day" | "week" | "month" | null
   points: KpiTrendPoint[]

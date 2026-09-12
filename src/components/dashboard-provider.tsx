@@ -38,10 +38,15 @@ type DashboardState = {
   isDefaultLayout: boolean
   sources: SourceStates
   saving: boolean
+  /** Appends a widget. Prefer `insertWidget` when the user chose a spot. */
   addWidget: (type: string, options?: WidgetOptionValues) => void
+  /** Adds a widget at a position in the layout; the index is clamped. */
+  insertWidget: (type: string, index: number, options?: WidgetOptionValues) => void
   removeWidget: (id: string) => void
   updateWidget: (id: string, options: WidgetOptionValues) => void
   moveWidget: (id: string, direction: -1 | 1) => void
+  /** Drops the widget `id` into the slot currently held by `overId`. */
+  reorderWidgets: (id: string, overId: string) => void
   resetLayout: () => void
   clearLayout: () => void
   refreshData: () => void
@@ -160,22 +165,53 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     [persist]
   )
 
-  const addWidget = React.useCallback(
-    (type: string, options: WidgetOptionValues = {}) => {
+  const insertWidget = React.useCallback(
+    (type: string, index: number, options: WidgetOptionValues = {}) => {
       const definition = getWidgetDefinition(type)
 
       if (!definition) {
         return
       }
 
-      commit((current) => [
-        ...current,
-        {
+      commit((current) => {
+        const at = Math.max(0, Math.min(index, current.length))
+        const next = [...current]
+
+        next.splice(at, 0, {
           id: createWidgetId(type),
           type,
           options: { ...defaultWidgetOptions(definition), ...options },
-        },
-      ])
+        })
+
+        return next
+      })
+    },
+    [commit]
+  )
+
+  const addWidget = React.useCallback(
+    (type: string, options: WidgetOptionValues = {}) => {
+      insertWidget(type, Number.MAX_SAFE_INTEGER, options)
+    },
+    [insertWidget]
+  )
+
+  const reorderWidgets = React.useCallback(
+    (id: string, overId: string) => {
+      commit((current) => {
+        const from = current.findIndex((widget) => widget.id === id)
+        const to = current.findIndex((widget) => widget.id === overId)
+
+        if (from === -1 || to === -1 || from === to) {
+          return current
+        }
+
+        const next = [...current]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved as DashboardWidget)
+
+        return next
+      })
     },
     [commit]
   )
@@ -308,9 +344,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       sources,
       saving,
       addWidget,
+      insertWidget,
       removeWidget,
       updateWidget,
       moveWidget,
+      reorderWidgets,
       resetLayout,
       clearLayout,
       refreshData,
@@ -323,9 +361,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       sources,
       saving,
       addWidget,
+      insertWidget,
       removeWidget,
       updateWidget,
       moveWidget,
+      reorderWidgets,
       resetLayout,
       clearLayout,
       refreshData,

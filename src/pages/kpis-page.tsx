@@ -384,9 +384,8 @@ function TrendCard({
           <p className="text-destructive text-sm">{error}</p>
         ) : !trend?.available ? (
           <p className="text-muted-foreground text-sm">
-            RevenueCat did not return chart data for this project. Chart access
-            depends on your RevenueCat plan; the snapshot metrics above are
-            unaffected.
+            {trend?.message ??
+              "RevenueCat did not return this chart. The snapshot metrics above are unaffected."}
           </p>
         ) : trend.points.length === 0 ? (
           <p className="text-muted-foreground text-sm">

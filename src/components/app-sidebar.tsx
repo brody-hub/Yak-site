@@ -72,7 +72,7 @@ const support = [
     permission: "reports",
   },
   {
-    name: "Analytics",
+    name: "Analytic Events",
     url: "/analytics",
     icon: <ActivityIcon />,
     permission: "analytics",

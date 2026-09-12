@@ -235,7 +235,12 @@ function KpiTrendBody({ options, sources }: WidgetBodyProps) {
 
   if (!state.data.available) {
     return (
-      <WidgetMessage message="RevenueCat did not return chart data for this project. Chart access depends on your RevenueCat plan; the snapshot metrics above still work." />
+      <WidgetMessage
+        message={
+          state.data.message ??
+          "RevenueCat did not return this chart. Snapshot metrics still work."
+        }
+      />
     )
   }
 
@@ -291,7 +296,7 @@ function KpiMetricsTable({ sources }: WidgetBodyProps) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Analytics                                                                   */
+/* Analytic Events                                                             */
 /* -------------------------------------------------------------------------- */
 
 const ANALYTICS_STAT_LABELS: Record<string, string> = {

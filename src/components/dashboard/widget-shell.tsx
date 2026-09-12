@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  GripVerticalIcon,
   MoreVerticalIcon,
   SettingsIcon,
   Trash2Icon,
@@ -29,34 +30,85 @@ import { cn } from "@/lib/utils"
 /**
  * Chrome shared by every dashboard tile: the title, the per-tile menu, and the
  * loading, error, and empty states so no individual widget has to repeat them.
+ *
+ * In edit mode the header grows a grip. The drag listeners are bound to the
+ * grip alone so the menu and anything interactive inside the tile keep working
+ * while the layout is being rearranged.
  */
-export function WidgetShell({
-  title,
-  subtitle,
-  editing,
-  onConfigure,
-  onRemove,
-  onMove,
-  canMoveUp,
-  canMoveDown,
-  className,
-  children,
-}: {
-  title: string
-  subtitle?: string | null
-  editing: boolean
-  onConfigure: () => void
-  onRemove: () => void
-  onMove: (direction: -1 | 1) => void
-  canMoveUp: boolean
-  canMoveDown: boolean
-  className?: string
-  children: React.ReactNode
-}) {
+export const WidgetShell = React.forwardRef<
+  HTMLDivElement,
+  {
+    title: string
+    subtitle?: string | null
+    editing: boolean
+    onConfigure: () => void
+    onRemove: () => void
+    onMove: (direction: -1 | 1) => void
+    canMoveUp: boolean
+    canMoveDown: boolean
+    /** Spread onto the grip so a sortable hook can own the drag. */
+    dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>
+    /** True for the tile being dragged; it fades to mark the slot it left. */
+    dragging?: boolean
+    /** True when a palette item hovering over this tile would be inserted before it. */
+    dropTarget?: boolean
+    className?: string
+    style?: React.CSSProperties
+    children: React.ReactNode
+  }
+>(function WidgetShell(
+  {
+    title,
+    subtitle,
+    editing,
+    onConfigure,
+    onRemove,
+    onMove,
+    canMoveUp,
+    canMoveDown,
+    dragHandleProps,
+    dragging,
+    dropTarget,
+    className,
+    style,
+    children,
+  },
+  ref
+) {
   return (
-    <Card className={cn("@container/card flex flex-col", className)}>
+    <Card
+      ref={ref}
+      style={style}
+      data-dragging={dragging ? "" : undefined}
+      data-drop-target={dropTarget ? "" : undefined}
+      className={cn(
+        "@container/card relative flex flex-col transition-[box-shadow,opacity] duration-150",
+        editing && "ring-border/60 ring-1 ring-inset",
+        dragging && "opacity-40",
+        dropTarget && "ring-primary ring-2 ring-inset",
+        className
+      )}
+    >
+      {dropTarget ? (
+        <span
+          aria-hidden
+          className="bg-primary absolute inset-y-3 -left-2.5 w-1 rounded-full @xl/board:inset-y-3"
+        />
+      ) : null}
       <CardHeader className="gap-1 pb-2">
-        <CardDescription className="line-clamp-1">{title}</CardDescription>
+        <div className="flex min-w-0 items-center gap-1.5">
+          {editing ? (
+            <button
+              type="button"
+              aria-label={`Drag ${title}`}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring -ml-1.5 flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-md outline-none focus-visible:ring-2 active:cursor-grabbing"
+              {...dragHandleProps}
+            >
+              <GripVerticalIcon className="size-4" />
+            </button>
+          ) : null}
+          <CardDescription className="line-clamp-1">{title}</CardDescription>
+        </div>
         {subtitle ? (
           <p className="text-muted-foreground text-xs">{subtitle}</p>
         ) : null}
@@ -106,7 +158,7 @@ export function WidgetShell({
       <CardContent className="flex-1">{children}</CardContent>
     </Card>
   )
-}
+})
 
 export function WidgetLoading({ lines = 2 }: { lines?: number }) {
   return (

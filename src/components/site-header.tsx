@@ -10,7 +10,7 @@ const titles: Record<string, string> = {
   "/tasks": "Tasks",
   "/users": "Users",
   "/reports": "Reports",
-  "/analytics": "Analytics",
+  "/analytics": "Analytic Events",
   "/settings/user-management": "User management",
   "/settings/theme": "Theme",
   "/settings/discord": "Discord",

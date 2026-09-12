@@ -21,7 +21,7 @@ export const PANEL_PERMISSIONS: PanelPermission[] = [
   { id: "tasks", label: "Tasks", group: "Main" },
   { id: "users", label: "Users", group: "Support" },
   { id: "reports", label: "Reports", group: "Support" },
-  { id: "analytics", label: "Analytics", group: "Support" },
+  { id: "analytics", label: "Analytic Events", group: "Support" },
   { id: "user-management", label: "User management", group: "Settings" },
   { id: "theme", label: "Theme", group: "Settings" },
   { id: "discord", label: "Discord", group: "Settings" },

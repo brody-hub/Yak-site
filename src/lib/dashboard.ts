@@ -25,12 +25,16 @@ export const WIDGET_SIZE_LABELS: Record<WidgetSize, string> = {
   full: "Full width",
 }
 
-/** Tailwind column spans against the 4-column dashboard grid. */
+/**
+ * Tailwind column spans against the 4-column dashboard grid. The grid is its
+ * own container (`@container/board`) so tiles reflow when the widget palette
+ * takes space beside it in edit mode.
+ */
 export const WIDGET_SIZE_CLASSES: Record<WidgetSize, string> = {
-  sm: "@xl/main:col-span-2 @5xl/main:col-span-1",
-  md: "@xl/main:col-span-2 @5xl/main:col-span-2",
-  lg: "@xl/main:col-span-4 @5xl/main:col-span-3",
-  full: "@xl/main:col-span-4 @5xl/main:col-span-4",
+  sm: "@xl/board:col-span-2 @5xl/board:col-span-1",
+  md: "@xl/board:col-span-2 @5xl/board:col-span-2",
+  lg: "@xl/board:col-span-4 @5xl/board:col-span-3",
+  full: "@xl/board:col-span-4 @5xl/board:col-span-4",
 }
 
 export type WidgetOption =
@@ -79,7 +83,7 @@ export type DashboardWidget = {
 
 export type WidgetCategory =
   | "Revenue"
-  | "Analytics"
+  | "Analytic Events"
   | "Support"
   | "Tasks"
   | "Users"
@@ -251,12 +255,12 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     sources: () => ["kpi.overview"],
   },
 
-  /* --------------------------------- Analytics --------------------------- */
+  /* ------------------------------ Analytic Events ------------------------ */
   {
     type: "analytics-stat",
-    title: "Analytics metric",
+    title: "Event metric",
     description: "Event volume, unique users, or today's events.",
-    category: "Analytics",
+    category: "Analytic Events",
     permission: "analytics",
     sizes: ["sm", "md"],
     defaultSize: "sm",
@@ -278,9 +282,9 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     type: "analytics-trend",
-    title: "Analytics trend",
+    title: "Event trend",
     description: "Daily events and unique users over your chosen window.",
-    category: "Analytics",
+    category: "Analytic Events",
     permission: "analytics",
     sizes: ["md", "lg", "full"],
     defaultSize: "full",
@@ -305,7 +309,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     type: "analytics-top-events",
     title: "Top events",
     description: "The most frequent event names, with change against the prior window.",
-    category: "Analytics",
+    category: "Analytic Events",
     permission: "analytics",
     sizes: ["md", "lg"],
     defaultSize: "md",
@@ -477,7 +481,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
 
 export const WIDGET_CATEGORIES: WidgetCategory[] = [
   "Revenue",
-  "Analytics",
+  "Analytic Events",
   "Support",
   "Tasks",
   "Users",
@@ -689,7 +693,11 @@ export function defaultLayout(context: {
   }
 
   add("kpi-stat-group", { group: "revenue" })
-  add("kpi-trend", { chart: "revenue", days: "30" })
+  // Graphs first: two per row so the trends read side by side.
+  add("kpi-trend", { chart: "revenue", days: "30", size: "md" })
+  add("kpi-trend", { chart: "mrr", days: "90", size: "md" })
+  add("kpi-trend", { chart: "active_subscriptions", days: "90", size: "md" })
+  add("kpi-trend", { chart: "new_customers", days: "30", size: "md" })
   add("analytics-stat", { metric: "totalEvents" })
   add("reports-stat", { type: "all" })
   add("tasks-stat", { status: "in_progress" })

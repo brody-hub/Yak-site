@@ -155,10 +155,13 @@ export function AnalyticsPage() {
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
       <div className="flex flex-col gap-4 px-4 lg:px-6">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">Analytics</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            Analytic Events
+          </h2>
           <p className="text-muted-foreground text-sm">
-            Product analytics stream — inspect volume, top events, and live
-            activity from your application.
+            Events your application sends to Stand. Inspect volume, top
+            events, and live activity. Subscription and revenue numbers live
+            under KPIs.
           </p>
         </div>
 
