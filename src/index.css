@@ -128,3 +128,27 @@
     @apply font-sans;
     }
 }
+
+/* Dashboard board (react-grid-layout) */
+.react-grid-item.react-grid-placeholder {
+  background: var(--primary);
+  opacity: 0.12;
+  border-radius: var(--radius-xl);
+}
+.react-grid-item.react-draggable-dragging {
+  cursor: grabbing;
+}
+.react-grid-item.react-draggable-dragging > *,
+.react-grid-item.resizing > * {
+  box-shadow: 0 24px 48px -16px rgb(0 0 0 / 0.35);
+}
+.react-grid-item > .react-resizable-handle {
+  z-index: 4;
+}
+.react-grid-item > .react-resizable-handle::after {
+  border-color: var(--muted-foreground);
+  width: 7px;
+  height: 7px;
+  right: 5px;
+  bottom: 5px;
+}

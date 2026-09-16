@@ -6,14 +6,22 @@ import { useAuth } from "@/components/auth-provider"
 import { useIntegrations } from "@/components/integrations-provider"
 import { ApiError, dashboardApi } from "@/lib/api"
 import {
+  applyLayoutItems,
+  clampLayout,
+  compactWidgets,
   createWidgetId,
   defaultLayout,
   defaultWidgetOptions,
+  findFreeSlot,
   getWidgetDefinition,
+  layoutsDiffer,
+  placeWidgets,
   resolveWidgetOptions,
   type DashboardWidget,
+  type WidgetLayout,
   type WidgetOptionValues,
 } from "@/lib/dashboard"
+import type { LayoutItem } from "react-grid-layout"
 import {
   fetchSource,
   type SourceKey,
@@ -38,15 +46,20 @@ type DashboardState = {
   isDefaultLayout: boolean
   sources: SourceStates
   saving: boolean
-  /** Appends a widget. Prefer `insertWidget` when the user chose a spot. */
-  addWidget: (type: string, options?: WidgetOptionValues) => void
-  /** Adds a widget at a position in the layout; the index is clamped. */
-  insertWidget: (type: string, index: number, options?: WidgetOptionValues) => void
+  /** Adds a widget in the first free slot, or at `at` when the user dropped it somewhere. */
+  addWidget: (
+    type: string,
+    at?: Pick<WidgetLayout, "x" | "y">,
+    options?: WidgetOptionValues
+  ) => void
   removeWidget: (id: string) => void
   updateWidget: (id: string, options: WidgetOptionValues) => void
-  moveWidget: (id: string, direction: -1 | 1) => void
-  /** Drops the widget `id` into the slot currently held by `overId`. */
-  reorderWidgets: (id: string, overId: string) => void
+  /**
+   * Takes positions back from the board. `persist` is true after a drag or
+   * resize the user finished; false when the board merely compacted what it
+   * was given, which should not count as the user saving a layout.
+   */
+  applyLayout: (items: readonly LayoutItem[], persist: boolean) => void
   resetLayout: () => void
   clearLayout: () => void
   refreshData: () => void
@@ -56,22 +69,23 @@ const DashboardContext = React.createContext<DashboardState | undefined>(
   undefined
 )
 
-/** Drops widget types that no longer exist and backfills missing options. */
+/**
+ * Drops widget types that no longer exist, backfills missing options, and
+ * gives every tile a grid position. Positions are assigned before options are
+ * resolved because pre-grid layouts carry their width in `options.size`.
+ */
 function normalizeWidgets(widgets: DashboardWidget[]): DashboardWidget[] {
-  return widgets.flatMap((widget) => {
+  return placeWidgets(widgets).map((widget) => {
     const definition = getWidgetDefinition(widget.type)
 
-    if (!definition) {
-      return []
+    return {
+      id: widget.id,
+      type: widget.type,
+      layout: widget.layout,
+      options: definition
+        ? resolveWidgetOptions(definition, widget.options ?? {})
+        : widget.options,
     }
-
-    return [
-      {
-        id: widget.id,
-        type: widget.type,
-        options: resolveWidgetOptions(definition, widget.options ?? {}),
-      },
-    ]
   })
 }
 
@@ -165,8 +179,12 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     [persist]
   )
 
-  const insertWidget = React.useCallback(
-    (type: string, index: number, options: WidgetOptionValues = {}) => {
+  const addWidget = React.useCallback(
+    (
+      type: string,
+      at?: Pick<WidgetLayout, "x" | "y">,
+      options: WidgetOptionValues = {}
+    ) => {
       const definition = getWidgetDefinition(type)
 
       if (!definition) {
@@ -174,51 +192,47 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       }
 
       commit((current) => {
-        const at = Math.max(0, Math.min(index, current.length))
-        const next = [...current]
+        const taken = current.flatMap((widget) =>
+          widget.layout ? [widget.layout] : []
+        )
+        const size = clampLayout(definition.grid, {})
+        const slot = at
+          ? clampLayout(definition.grid, { ...size, x: at.x, y: at.y })
+          : { ...size, ...findFreeSlot(taken, size.w, size.h) }
 
-        next.splice(at, 0, {
-          id: createWidgetId(type),
-          type,
-          options: { ...defaultWidgetOptions(definition), ...options },
-        })
-
-        return next
+        return compactWidgets([
+          ...current,
+          {
+            id: createWidgetId(type),
+            type,
+            options: { ...defaultWidgetOptions(definition), ...options },
+            layout: slot,
+          },
+        ])
       })
     },
     [commit]
   )
 
-  const addWidget = React.useCallback(
-    (type: string, options: WidgetOptionValues = {}) => {
-      insertWidget(type, Number.MAX_SAFE_INTEGER, options)
-    },
-    [insertWidget]
-  )
+  const applyLayout = React.useCallback(
+    (items: readonly LayoutItem[], persist: boolean) => {
+      if (persist) {
+        commit((current) => applyLayoutItems(current, items))
+        return
+      }
 
-  const reorderWidgets = React.useCallback(
-    (id: string, overId: string) => {
-      commit((current) => {
-        const from = current.findIndex((widget) => widget.id === id)
-        const to = current.findIndex((widget) => widget.id === overId)
-
-        if (from === -1 || to === -1 || from === to) {
-          return current
-        }
-
-        const next = [...current]
-        const [moved] = next.splice(from, 1)
-        next.splice(to, 0, moved as DashboardWidget)
-
-        return next
-      })
+      setWidgets((current) =>
+        layoutsDiffer(current, items) ? applyLayoutItems(current, items) : current
+      )
     },
     [commit]
   )
 
   const removeWidget = React.useCallback(
     (id: string) => {
-      commit((current) => current.filter((widget) => widget.id !== id))
+      commit((current) =>
+        compactWidgets(current.filter((widget) => widget.id !== id))
+      )
     },
     [commit]
   )
@@ -241,26 +255,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           }
         })
       )
-    },
-    [commit]
-  )
-
-  const moveWidget = React.useCallback(
-    (id: string, direction: -1 | 1) => {
-      commit((current) => {
-        const index = current.findIndex((widget) => widget.id === id)
-        const target = index + direction
-
-        if (index === -1 || target < 0 || target >= current.length) {
-          return current
-        }
-
-        const next = [...current]
-        const [moved] = next.splice(index, 1)
-        next.splice(target, 0, moved as DashboardWidget)
-
-        return next
-      })
     },
     [commit]
   )
@@ -344,11 +338,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       sources,
       saving,
       addWidget,
-      insertWidget,
       removeWidget,
       updateWidget,
-      moveWidget,
-      reorderWidgets,
+      applyLayout,
       resetLayout,
       clearLayout,
       refreshData,
@@ -361,11 +353,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       sources,
       saving,
       addWidget,
-      insertWidget,
       removeWidget,
       updateWidget,
-      moveWidget,
-      reorderWidgets,
+      applyLayout,
       resetLayout,
       clearLayout,
       refreshData,

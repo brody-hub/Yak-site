@@ -1,7 +1,5 @@
-/* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 import { Link } from "react-router-dom"
-import { useDraggable } from "@dnd-kit/core"
 import { GripVerticalIcon, LockIcon, PlusIcon, SearchIcon } from "lucide-react"
 
 import { useAuth } from "@/components/auth-provider"
@@ -23,26 +21,24 @@ import { cn } from "@/lib/utils"
  * The widget palette shown beside the board in edit mode.
  *
  * Every widget in the catalogue is listed so people can see what the dashboard
- * is capable of. Available ones are dragged straight onto the board, dropping
- * exactly where the pointer lands; the Add button is the keyboard route and
- * puts the tile at the top so it is visible immediately. Anything unavailable
- * is shown locked with the specific reason.
+ * is capable of. Available ones are dragged onto the board with the browser's
+ * own drag and drop, which the board accepts as an external drop and snaps to
+ * the grid under the pointer; the Add button is the keyboard route and puts the
+ * tile in the first free slot. Anything unavailable is shown locked with the
+ * specific reason.
  */
 
-/** Prefix on draggable ids so the board can tell a palette drag from a tile drag. */
-export const PALETTE_ID_PREFIX = "palette:"
-
-export type PaletteDragData = { kind: "palette"; type: string }
-
-export function paletteDragId(type: string) {
-  return `${PALETTE_ID_PREFIX}${type}`
-}
+/** Data transfer type carrying the widget type during a palette drag. */
+export const WIDGET_DRAG_MIME = "application/x-stand-widget"
 
 export function WidgetPalette({
   onAdd,
+  onDragTypeChange,
   className,
 }: {
   onAdd: (type: string) => void
+  /** Fires with the widget type when a drag starts, and null when it ends. */
+  onDragTypeChange: (type: string | null) => void
   className?: string
 }) {
   const { can, canManageUsers } = useAuth()
@@ -91,7 +87,8 @@ export function WidgetPalette({
         <div className="space-y-1">
           <h2 className="text-sm font-semibold">Widgets</h2>
           <p className="text-muted-foreground text-xs">
-            Drag a widget onto the board, or press Add to place it at the top.
+            Drag a widget onto the board, or press Add to place it in the first
+            free space.
           </p>
         </div>
         <div className="relative">
@@ -125,10 +122,33 @@ export function WidgetPalette({
                   }
 
                   return state.available ? (
-                    <DraggablePaletteItem
+                    <PaletteCard
                       key={definition.type}
                       definition={definition}
-                      onAdd={() => onAdd(definition.type)}
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData(
+                          WIDGET_DRAG_MIME,
+                          definition.type
+                        )
+                        // Firefox needs a text payload before it will drag.
+                        event.dataTransfer.setData("text/plain", definition.type)
+                        event.dataTransfer.effectAllowed = "copy"
+                        onDragTypeChange(definition.type)
+                      }}
+                      onDragEnd={() => onDragTypeChange(null)}
+                      action={
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => onAdd(definition.type)}
+                        >
+                          <PlusIcon className="size-3.5" />
+                          Add
+                        </Button>
+                      }
                     />
                   ) : (
                     <PaletteCard
@@ -161,81 +181,35 @@ export function WidgetPalette({
   )
 }
 
-function DraggablePaletteItem({
+function PaletteCard({
   definition,
-  onAdd,
+  draggable,
+  locked,
+  reason,
+  action,
+  onDragStart,
+  onDragEnd,
 }: {
   definition: WidgetDefinition
-  onAdd: () => void
+  draggable?: boolean
+  locked?: boolean
+  reason?: string
+  action?: React.ReactNode
+  onDragStart?: React.DragEventHandler<HTMLDivElement>
+  onDragEnd?: React.DragEventHandler<HTMLDivElement>
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: paletteDragId(definition.type),
-    data: { kind: "palette", type: definition.type } satisfies PaletteDragData,
-  })
+  const footprint = `${definition.grid.w} × ${definition.grid.h}`
 
-  return (
-    <PaletteCard
-      ref={setNodeRef}
-      definition={definition}
-      draggable
-      dragging={isDragging}
-      handleProps={{ ...attributes, ...listeners }}
-      action={
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 px-2 text-xs"
-          onClick={onAdd}
-        >
-          <PlusIcon className="size-3.5" />
-          Add
-        </Button>
-      }
-    />
-  )
-}
-
-/**
- * One row in the palette. Also rendered inside the drag overlay, which is why
- * it is a plain presentational component with no hook of its own.
- */
-export const PaletteCard = React.forwardRef<
-  HTMLDivElement,
-  {
-    definition: WidgetDefinition
-    draggable?: boolean
-    dragging?: boolean
-    locked?: boolean
-    reason?: string
-    handleProps?: React.HTMLAttributes<HTMLDivElement>
-    action?: React.ReactNode
-    className?: string
-  }
->(function PaletteCard(
-  {
-    definition,
-    draggable,
-    dragging,
-    locked,
-    reason,
-    handleProps,
-    action,
-    className,
-  },
-  ref
-) {
   return (
     <div
-      ref={ref}
-      {...(draggable ? handleProps : {})}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       className={cn(
-        "bg-background flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-[box-shadow,opacity,border-color] select-none",
+        "bg-background flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-[box-shadow,border-color] select-none",
         draggable &&
-          "hover:border-primary/50 focus-visible:ring-ring cursor-grab touch-none outline-none hover:shadow-sm focus-visible:ring-2 active:cursor-grabbing",
-        dragging && "opacity-40",
-        locked && "bg-muted/40 text-muted-foreground",
-        className
+          "hover:border-primary/50 cursor-grab hover:shadow-sm active:cursor-grabbing",
+        locked && "bg-muted/40 text-muted-foreground"
       )}
     >
       <span
@@ -263,16 +237,22 @@ export const PaletteCard = React.forwardRef<
         <p className="text-muted-foreground line-clamp-2 text-xs">
           {locked && reason ? reason : definition.description}
         </p>
+        {!locked ? (
+          <p className="text-muted-foreground/80 text-[11px] tabular-nums">
+            Starts at {footprint} cells
+          </p>
+        ) : null}
       </div>
       {action ? (
         <div
           className="shrink-0"
-          // Stop the pointer from starting a drag when the button is pressed.
-          onPointerDown={(event) => event.stopPropagation()}
+          // The button is not a drag source; keep its clicks to itself.
+          draggable={false}
+          onMouseDown={(event) => event.stopPropagation()}
         >
           {action}
         </div>
       ) : null}
     </div>
   )
-})
+}

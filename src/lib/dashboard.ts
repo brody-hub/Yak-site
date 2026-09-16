@@ -1,3 +1,5 @@
+import { verticalCompactor, type LayoutItem } from "react-grid-layout"
+
 import type { IntegrationProviderId } from "@/lib/integrations"
 import { KPI_CHARTS, KPI_CHART_LABELS, KPI_SUMMARY_METRICS } from "@/lib/kpis"
 import type { PanelPermissionId } from "@/lib/panel-permissions"
@@ -16,26 +18,45 @@ import type { PanelPermissionId } from "@/lib/panel-permissions"
  * fetches from an endpoint that enforces the same permission server side.
  */
 
-export type WidgetSize = "sm" | "md" | "lg" | "full"
-
-export const WIDGET_SIZE_LABELS: Record<WidgetSize, string> = {
-  sm: "Small (quarter width)",
-  md: "Medium (half width)",
-  lg: "Large (three quarters)",
-  full: "Full width",
-}
+/* -------------------------------------------------------------------------- */
+/* Grid                                                                        */
+/* -------------------------------------------------------------------------- */
 
 /**
- * Tailwind column spans against the 4-column dashboard grid. The grid is its
- * own container (`@container/board`) so tiles reflow when the widget palette
- * takes space beside it in edit mode.
+ * The board is a 12 column grid. A tile occupies a rectangle of cells, moves by
+ * its grip, and resizes from its corner within the limits its definition sets.
+ * Rows are fixed height so a tile's `h` maps to pixels the same way for every
+ * user: `h * GRID_ROW_HEIGHT + (h - 1) * GRID_MARGIN`.
  */
-export const WIDGET_SIZE_CLASSES: Record<WidgetSize, string> = {
-  sm: "@xl/board:col-span-2 @5xl/board:col-span-1",
-  md: "@xl/board:col-span-2 @5xl/board:col-span-2",
-  lg: "@xl/board:col-span-4 @5xl/board:col-span-3",
-  full: "@xl/board:col-span-4 @5xl/board:col-span-4",
+export const GRID_COLS = 12
+export const GRID_ROW_HEIGHT = 48
+export const GRID_MARGIN = 16
+
+/** Where a tile sits and how many cells it covers. */
+export type WidgetLayout = { x: number; y: number; w: number; h: number }
+
+/** Size a widget starts at and the range it may be resized within. */
+export type WidgetGrid = {
+  w: number
+  h: number
+  minW: number
+  minH: number
+  maxW: number
+  maxH: number
 }
+
+const GRID_PRESETS = {
+  /** One number with a caption. */
+  stat: { w: 3, h: 3, minW: 2, minH: 3, maxW: 6, maxH: 4 },
+  /** A row of numbers. */
+  statGroup: { w: 12, h: 3, minW: 6, minH: 3, maxW: 12, maxH: 4 },
+  /** A time series; grows to fill whatever it is given. */
+  chart: { w: 6, h: 6, minW: 4, minH: 4, maxW: 12, maxH: 12 },
+  /** Scrolling rows. */
+  list: { w: 6, h: 6, minW: 3, minH: 4, maxW: 12, maxH: 16 },
+  /** A longer table. */
+  table: { w: 6, h: 8, minW: 4, minH: 4, maxW: 12, maxH: 16 },
+} satisfies Record<string, WidgetGrid>
 
 export type WidgetOption =
   | {
@@ -79,6 +100,8 @@ export type DashboardWidget = {
   id: string
   type: string
   options: WidgetOptionValues
+  /** Absent only on layouts saved before the grid; `placeWidgets` fills it. */
+  layout?: WidgetLayout
 }
 
 export type WidgetCategory =
@@ -97,8 +120,8 @@ export type WidgetDefinition = {
   permission: PanelPermissionId
   /** Integration that must be connected before the widget can show anything. */
   requires?: IntegrationProviderId
-  sizes: WidgetSize[]
-  defaultSize: WidgetSize
+  /** Starting footprint and resize limits on the board. */
+  grid: WidgetGrid
   options: WidgetOption[]
   /** Data keys the widget needs once its options are resolved. */
   sources: (options: WidgetOptionValues) => string[]
@@ -164,8 +187,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     category: "Revenue",
     permission: "kpis",
     requires: "revenuecat",
-    sizes: ["sm", "md"],
-    defaultSize: "sm",
+    grid: GRID_PRESETS.stat,
     options: [
       {
         key: "metric",
@@ -194,8 +216,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     category: "Revenue",
     permission: "kpis",
     requires: "revenuecat",
-    sizes: ["md", "lg", "full"],
-    defaultSize: "full",
+    grid: GRID_PRESETS.statGroup,
     options: [
       {
         key: "group",
@@ -221,8 +242,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     category: "Revenue",
     permission: "kpis",
     requires: "revenuecat",
-    sizes: ["md", "lg", "full"],
-    defaultSize: "full",
+    grid: GRID_PRESETS.chart,
     options: [
       {
         key: "chart",
@@ -249,8 +269,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     category: "Revenue",
     permission: "kpis",
     requires: "revenuecat",
-    sizes: ["md", "lg", "full"],
-    defaultSize: "lg",
+    grid: GRID_PRESETS.table,
     options: [],
     sources: () => ["kpi.overview"],
   },
@@ -262,8 +281,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "Event volume, unique users, or today's events.",
     category: "Analytic Events",
     permission: "analytics",
-    sizes: ["sm", "md"],
-    defaultSize: "sm",
+    grid: GRID_PRESETS.stat,
     options: [
       {
         key: "metric",
@@ -286,8 +304,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "Daily events and unique users over your chosen window.",
     category: "Analytic Events",
     permission: "analytics",
-    sizes: ["md", "lg", "full"],
-    defaultSize: "full",
+    grid: GRID_PRESETS.chart,
     options: [
       {
         key: "series",
@@ -311,8 +328,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "The most frequent event names, with change against the prior window.",
     category: "Analytic Events",
     permission: "analytics",
-    sizes: ["md", "lg"],
-    defaultSize: "md",
+    grid: GRID_PRESETS.list,
     options: [windowOption(7), limitOption("Events to show", 8)],
     sources: (options) => [
       `analytics.topEvents:${Number(options.days ?? 7)}:${Number(options.limit ?? 8)}`,
@@ -326,8 +342,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "Count of unresolved reports, optionally for one type.",
     category: "Support",
     permission: "reports",
-    sizes: ["sm", "md"],
-    defaultSize: "sm",
+    grid: GRID_PRESETS.stat,
     options: [
       {
         key: "type",
@@ -351,8 +366,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "Open report volume split across bug, suggestion, support, and report.",
     category: "Support",
     permission: "reports",
-    sizes: ["md", "lg"],
-    defaultSize: "md",
+    grid: GRID_PRESETS.list,
     options: [],
     sources: () => ["reports.counts"],
   },
@@ -362,8 +376,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "The most recently updated open reports, linking into the inbox.",
     category: "Support",
     permission: "reports",
-    sizes: ["md", "lg", "full"],
-    defaultSize: "lg",
+    grid: GRID_PRESETS.list,
     options: [limitOption("Reports to show", 6)],
     sources: (options) => [`reports.recent:${Number(options.limit ?? 6)}`],
   },
@@ -375,8 +388,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "How many tickets sit in one status, or across the whole board.",
     category: "Tasks",
     permission: "tasks",
-    sizes: ["sm", "md"],
-    defaultSize: "sm",
+    grid: GRID_PRESETS.stat,
     options: [
       {
         key: "status",
@@ -406,8 +418,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "Ticket counts per status, with urgent work called out.",
     category: "Tasks",
     permission: "tasks",
-    sizes: ["md", "lg", "full"],
-    defaultSize: "md",
+    grid: GRID_PRESETS.list,
     options: [
       {
         key: "mineOnly",
@@ -424,8 +435,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "The most recently updated tickets on the board.",
     category: "Tasks",
     permission: "tasks",
-    sizes: ["md", "lg", "full"],
-    defaultSize: "lg",
+    grid: GRID_PRESETS.list,
     options: [
       limitOption("Tickets to show", 6),
       {
@@ -445,8 +455,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "Totals from the user records your app syncs into Stand.",
     category: "Users",
     permission: "users",
-    sizes: ["sm", "md"],
-    defaultSize: "sm",
+    grid: GRID_PRESETS.stat,
     options: [
       {
         key: "metric",
@@ -472,8 +481,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     description: "How your synced users split across free, plus, and pro.",
     category: "Users",
     permission: "users",
-    sizes: ["md", "lg"],
-    defaultSize: "md",
+    grid: GRID_PRESETS.list,
     options: [windowOption(7)],
     sources: (options) => [`appUsers.stats:${Number(options.days ?? 7)}`],
   },
@@ -496,22 +504,13 @@ export function getWidgetDefinition(type: string) {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Every widget also carries `size` and an optional `title` override. They are
- * appended here rather than repeated in each definition.
+ * Every widget also carries an optional `title` override. It is appended here
+ * rather than repeated in each definition. Size is not an option: tiles are
+ * resized on the board itself.
  */
 export function widgetOptions(definition: WidgetDefinition): WidgetOption[] {
   return [
     ...definition.options,
-    {
-      key: "size",
-      label: "Width",
-      type: "select",
-      choices: definition.sizes.map((size) => ({
-        value: size,
-        label: WIDGET_SIZE_LABELS[size],
-      })),
-      default: definition.defaultSize,
-    },
     {
       key: "title",
       label: "Title",
@@ -576,16 +575,181 @@ export function resolveWidgetOptions(
   return resolved
 }
 
-export function widgetSize(
-  definition: WidgetDefinition,
-  options: WidgetOptionValues
-): WidgetSize {
-  const size = options.size
+/* -------------------------------------------------------------------------- */
+/* Layout                                                                      */
+/* -------------------------------------------------------------------------- */
 
-  return typeof size === "string" &&
-    definition.sizes.includes(size as WidgetSize)
-    ? (size as WidgetSize)
-    : definition.defaultSize
+/** Keeps a rectangle inside the grid and within the widget's resize limits. */
+export function clampLayout(
+  grid: WidgetGrid,
+  layout: Partial<WidgetLayout>
+): WidgetLayout {
+  const w = Math.min(
+    GRID_COLS,
+    grid.maxW,
+    Math.max(grid.minW, Math.round(layout.w ?? grid.w))
+  )
+  const h = Math.min(grid.maxH, Math.max(grid.minH, Math.round(layout.h ?? grid.h)))
+  const x = Math.min(GRID_COLS - w, Math.max(0, Math.round(layout.x ?? 0)))
+  const y = Math.max(0, Math.round(layout.y ?? 0))
+
+  return { x, y, w, h }
+}
+
+function overlaps(a: WidgetLayout, b: WidgetLayout) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+}
+
+/** First free rectangle of the given size, scanning left to right, top down. */
+export function findFreeSlot(
+  taken: WidgetLayout[],
+  w: number,
+  h: number
+): { x: number; y: number } {
+  const bottom = taken.reduce((max, item) => Math.max(max, item.y + item.h), 0)
+
+  for (let y = 0; y <= bottom; y += 1) {
+    for (let x = 0; x + w <= GRID_COLS; x += 1) {
+      const candidate = { x, y, w, h }
+
+      if (!taken.some((item) => overlaps(item, candidate))) {
+        return { x, y }
+      }
+    }
+  }
+
+  return { x: 0, y: bottom }
+}
+
+/**
+ * Column span a pre-grid layout stored as `options.size`, so upgrading users
+ * keep roughly the board they had.
+ */
+const LEGACY_SIZE_COLUMNS: Record<string, number> = {
+  sm: 3,
+  md: 6,
+  lg: 9,
+  full: 12,
+}
+
+/**
+ * Gives every widget a valid rectangle. Existing rectangles are clamped to the
+ * widget's limits; widgets without one are placed in the first free slot, in
+ * order, after everything that already has a position.
+ */
+export function placeWidgets(widgets: DashboardWidget[]): DashboardWidget[] {
+  const placed: DashboardWidget[] = []
+  const pending: DashboardWidget[] = []
+
+  for (const widget of widgets) {
+    const definition = getWidgetDefinition(widget.type)
+
+    if (!definition) {
+      continue
+    }
+
+    if (widget.layout) {
+      placed.push({
+        ...widget,
+        layout: clampLayout(definition.grid, widget.layout),
+      })
+    } else {
+      pending.push(widget)
+    }
+  }
+
+  const taken = placed.map((widget) => widget.layout as WidgetLayout)
+
+  for (const widget of pending) {
+    const definition = getWidgetDefinition(widget.type) as WidgetDefinition
+    const legacy = LEGACY_SIZE_COLUMNS[String(widget.options.size ?? "")]
+    const size = clampLayout(definition.grid, {
+      w: legacy ?? definition.grid.w,
+      h: definition.grid.h,
+    })
+    const slot = findFreeSlot(taken, size.w, size.h)
+    const layout = { ...slot, w: size.w, h: size.h }
+
+    taken.push(layout)
+    placed.push({ ...widget, layout })
+  }
+
+  return compactWidgets(placed)
+}
+
+/** The board's own layout item for a widget, with its resize limits attached. */
+export function toLayoutItem(widget: DashboardWidget): LayoutItem {
+  const definition = getWidgetDefinition(widget.type)
+  const grid = definition?.grid ?? GRID_PRESETS.stat
+  const layout = widget.layout ?? clampLayout(grid, {})
+
+  return {
+    i: widget.id,
+    ...layout,
+    minW: grid.minW,
+    minH: grid.minH,
+    maxW: Math.min(GRID_COLS, grid.maxW),
+    maxH: grid.maxH,
+    isResizable: grid.minW !== grid.maxW || grid.minH !== grid.maxH,
+  }
+}
+
+/**
+ * Pulls every tile up as far as it will go, the same way the board does while
+ * dragging, so what is saved is exactly what is shown.
+ */
+export function compactWidgets(widgets: DashboardWidget[]): DashboardWidget[] {
+  const compacted = verticalCompactor.compact(
+    widgets.map(toLayoutItem),
+    GRID_COLS
+  )
+  const byId = new Map(compacted.map((item) => [item.i, item]))
+
+  return widgets.map((widget) => {
+    const item = byId.get(widget.id)
+
+    return item
+      ? { ...widget, layout: { x: item.x, y: item.y, w: item.w, h: item.h } }
+      : widget
+  })
+}
+
+/** Writes positions from the board back onto the widgets that own them. */
+export function applyLayoutItems(
+  widgets: DashboardWidget[],
+  items: readonly LayoutItem[]
+): DashboardWidget[] {
+  const byId = new Map(items.map((item) => [item.i, item]))
+
+  return widgets.map((widget) => {
+    const item = byId.get(widget.id)
+
+    return item
+      ? { ...widget, layout: { x: item.x, y: item.y, w: item.w, h: item.h } }
+      : widget
+  })
+}
+
+/** True when any tile would move or change size. */
+export function layoutsDiffer(
+  widgets: DashboardWidget[],
+  items: readonly LayoutItem[]
+) {
+  const byId = new Map(items.map((item) => [item.i, item]))
+
+  return widgets.some((widget) => {
+    const item = byId.get(widget.id)
+    const layout = widget.layout
+
+    return (
+      !item ||
+      !layout ||
+      item.x !== layout.x ||
+      item.y !== layout.y ||
+      item.w !== layout.w ||
+      item.h !== layout.h
+    )
+  })
 }
 
 export function widgetTitle(
@@ -694,10 +858,10 @@ export function defaultLayout(context: {
 
   add("kpi-stat-group", { group: "revenue" })
   // Graphs first: two per row so the trends read side by side.
-  add("kpi-trend", { chart: "revenue", days: "30", size: "md" })
-  add("kpi-trend", { chart: "mrr", days: "90", size: "md" })
-  add("kpi-trend", { chart: "active_subscriptions", days: "90", size: "md" })
-  add("kpi-trend", { chart: "new_customers", days: "30", size: "md" })
+  add("kpi-trend", { chart: "revenue", days: "30" })
+  add("kpi-trend", { chart: "mrr", days: "90" })
+  add("kpi-trend", { chart: "active_subscriptions", days: "90" })
+  add("kpi-trend", { chart: "new_customers", days: "30" })
   add("analytics-stat", { metric: "totalEvents" })
   add("reports-stat", { type: "all" })
   add("tasks-stat", { status: "in_progress" })
@@ -705,7 +869,7 @@ export function defaultLayout(context: {
   add("analytics-trend", { series: "both", days: "30" })
   add("reports-recent")
 
-  return widgets
+  return placeWidgets(widgets)
 }
 
 export function createWidgetId(type: string) {

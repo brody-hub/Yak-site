@@ -1,7 +1,5 @@
 import * as React from "react"
 import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
   GripVerticalIcon,
   MoreVerticalIcon,
   SettingsIcon,
@@ -27,82 +25,53 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
+/** Selector the board uses to start a drag; only the grip carries it. */
+export const WIDGET_DRAG_HANDLE = "widget-drag-handle"
+
 /**
  * Chrome shared by every dashboard tile: the title, the per-tile menu, and the
  * loading, error, and empty states so no individual widget has to repeat them.
  *
- * In edit mode the header grows a grip. The drag listeners are bound to the
- * grip alone so the menu and anything interactive inside the tile keep working
- * while the layout is being rearranged.
+ * The tile fills whatever rectangle the board gives it. In edit mode the header
+ * grows a grip; the board binds dragging to that grip alone so the menu and
+ * anything interactive inside the tile keep working while the layout is being
+ * rearranged. Resizing is the board's corner handle, not part of this chrome.
  */
-export const WidgetShell = React.forwardRef<
-  HTMLDivElement,
-  {
-    title: string
-    subtitle?: string | null
-    editing: boolean
-    onConfigure: () => void
-    onRemove: () => void
-    onMove: (direction: -1 | 1) => void
-    canMoveUp: boolean
-    canMoveDown: boolean
-    /** Spread onto the grip so a sortable hook can own the drag. */
-    dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>
-    /** True for the tile being dragged; it fades to mark the slot it left. */
-    dragging?: boolean
-    /** True when a palette item hovering over this tile would be inserted before it. */
-    dropTarget?: boolean
-    className?: string
-    style?: React.CSSProperties
-    children: React.ReactNode
-  }
->(function WidgetShell(
-  {
-    title,
-    subtitle,
-    editing,
-    onConfigure,
-    onRemove,
-    onMove,
-    canMoveUp,
-    canMoveDown,
-    dragHandleProps,
-    dragging,
-    dropTarget,
-    className,
-    style,
-    children,
-  },
-  ref
-) {
+export function WidgetShell({
+  title,
+  subtitle,
+  editing,
+  onConfigure,
+  onRemove,
+  className,
+  children,
+}: {
+  title: string
+  subtitle?: string | null
+  editing: boolean
+  onConfigure: () => void
+  onRemove: () => void
+  className?: string
+  children: React.ReactNode
+}) {
   return (
     <Card
-      ref={ref}
-      style={style}
-      data-dragging={dragging ? "" : undefined}
-      data-drop-target={dropTarget ? "" : undefined}
       className={cn(
-        "@container/card relative flex flex-col transition-[box-shadow,opacity] duration-150",
+        "@container/card flex h-full flex-col transition-shadow duration-150",
         editing && "ring-border/60 ring-1 ring-inset",
-        dragging && "opacity-40",
-        dropTarget && "ring-primary ring-2 ring-inset",
         className
       )}
     >
-      {dropTarget ? (
-        <span
-          aria-hidden
-          className="bg-primary absolute inset-y-3 -left-2.5 w-1 rounded-full @xl/board:inset-y-3"
-        />
-      ) : null}
       <CardHeader className="gap-1 pb-2">
         <div className="flex min-w-0 items-center gap-1.5">
           {editing ? (
             <button
               type="button"
-              aria-label={`Drag ${title}`}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring -ml-1.5 flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-md outline-none focus-visible:ring-2 active:cursor-grabbing"
-              {...dragHandleProps}
+              aria-label={`Move ${title}`}
+              className={cn(
+                WIDGET_DRAG_HANDLE,
+                "text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring -ml-1.5 flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded-md outline-none focus-visible:ring-2 active:cursor-grabbing"
+              )}
             >
               <GripVerticalIcon className="size-4" />
             </button>
@@ -131,20 +100,6 @@ export const WidgetShell = React.forwardRef<
                   <SettingsIcon />
                   Configure
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!canMoveUp}
-                  onSelect={() => onMove(-1)}
-                >
-                  <ChevronLeftIcon />
-                  Move earlier
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!canMoveDown}
-                  onSelect={() => onMove(1)}
-                >
-                  <ChevronRightIcon />
-                  Move later
-                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onSelect={onRemove}>
                   <Trash2Icon />
@@ -155,10 +110,12 @@ export const WidgetShell = React.forwardRef<
           </CardAction>
         ) : null}
       </CardHeader>
-      <CardContent className="flex-1">{children}</CardContent>
+      <CardContent className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {children}
+      </CardContent>
     </Card>
   )
-})
+}
 
 export function WidgetLoading({ lines = 2 }: { lines?: number }) {
   return (

@@ -38,13 +38,17 @@ export function WidgetChart({
   config,
   series,
   height = 240,
+  fill = false,
   formatValue,
   showLegend,
 }: {
   data: Record<string, unknown>[]
   config: ChartConfig
   series: { key: string; style: ChartStyle }[]
+  /** Fixed pixel height. Ignored when `fill` is set. */
   height?: number
+  /** Stretch to the parent's height, for tiles the user can resize. */
+  fill?: boolean
   formatValue?: (value: number) => string
   showLegend?: boolean
 }) {
@@ -88,7 +92,11 @@ export function WidgetChart({
   const style = series[0]?.style ?? "area"
 
   return (
-    <ChartContainer config={config} style={{ height }} className="w-full">
+    <ChartContainer
+      config={config}
+      style={fill ? { height: "100%" } : { height }}
+      className={fill ? "aspect-auto h-full min-h-0 w-full" : "w-full"}
+    >
       {style === "bar" ? (
         <BarChart data={data} accessibilityLayer>
           {axes}

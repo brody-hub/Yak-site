@@ -255,6 +255,7 @@ function KpiTrendBody({ options, sources }: WidgetBodyProps) {
 
   return (
     <WidgetChart
+      fill
       data={state.data.points}
       config={config}
       series={[{ key: "value", style: asChartStyle(options.style) }]}
@@ -376,6 +377,7 @@ function AnalyticsTrend({ options, sources }: WidgetBodyProps) {
 
   return (
     <WidgetChart
+      fill
       data={state.data}
       config={config}
       series={series}
