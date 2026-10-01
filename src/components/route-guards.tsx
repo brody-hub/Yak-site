@@ -70,19 +70,23 @@ export function RequirePermission({
  * canMintApiKeys / canManageUsers checks rather than a panel permission.
  */
 export function RequireCanManageUsers() {
-  const { canManageUsers, user } = useAuth()
+  const { canManageUsers } = useAuth()
 
   if (canManageUsers) {
     return <Outlet />
   }
 
-  const fallback = user?.effectivePermissions[0]
-
-  if (!fallback) {
-    return <NoAccessPage />
-  }
-
-  return <Navigate to={permissionPath(fallback)} replace />
+  // Rendered inside the panel layout, so the sidebar stays available. A
+  // redirect here left members wondering why the page would not open.
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+      <h2 className="text-lg font-semibold">Owners and admins only</h2>
+      <p className="text-muted-foreground max-w-sm text-sm">
+        This page holds API keys and connected services. Ask an owner or admin
+        to make the change, or to give you the admin role.
+      </p>
+    </div>
+  )
 }
 
 function NoAccessPage() {

@@ -268,6 +268,12 @@ export function IntegrationsPage() {
                           {key.lastUsedAt
                             ? formatDateTime(key.lastUsedAt)
                             : "Never"}
+                          {key.lastErrorAt && key.lastError ? (
+                            <p className="text-destructive mt-1 max-w-xs text-xs whitespace-normal">
+                              Last rejected {formatDateTime(key.lastErrorAt)}:{" "}
+                              {key.lastError}
+                            </p>
+                          ) : null}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
                           {formatDateTime(key.createdAt)}

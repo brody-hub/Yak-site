@@ -323,9 +323,13 @@ export function ReportsPage() {
                         </p>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                           <span>
-                            {report.userName} · {report.userEmail}
+                            {report.userEmail
+                              ? `${report.userName} · ${report.userEmail}`
+                              : report.userName}
                           </span>
-                          <span className="capitalize">{report.platform}</span>
+                          {report.platform ? (
+                            <span className="capitalize">{report.platform}</span>
+                          ) : null}
                           {assignee ? (
                             <span className="inline-flex items-center gap-1">
                               <UserAvatar user={assignee} size="sm" />
@@ -426,16 +430,20 @@ function ReportDetailSheet({
                   {getReportPriorityLabel(report.priority)}
                 </Badge>
                 <StatusBadge status={report.status} />
-                <Badge variant="outline" className="capitalize">
-                  {report.platform}
-                </Badge>
+                {report.platform ? (
+                  <Badge variant="outline" className="capitalize">
+                    {report.platform}
+                  </Badge>
+                ) : null}
               </div>
 
               <div className="rounded-xl border p-4 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-medium">{report.userName}</p>
-                    <p className="text-muted-foreground">{report.userEmail}</p>
+                    <p className="text-muted-foreground">
+                      {report.userEmail ?? "No email on file"}
+                    </p>
                   </div>
                 </div>
                 <div className="mt-3 grid gap-1 text-muted-foreground">

@@ -21,8 +21,10 @@ export type SupportReport = {
   subject: string
   body: string
   userName: string
-  userEmail: string
-  platform: "ios" | "android" | "web"
+  /** Null when the app had no address for the reporter. */
+  userEmail: string | null
+  /** Null when the app did not say which platform the report came from. */
+  platform: "ios" | "android" | "web" | null
   assigneeId: string | null
   createdAt: string
   updatedAt: string
@@ -343,7 +345,7 @@ export function getReportsForUserEmail(
 ) {
   return reports
     .filter(
-      (report) => report.userEmail.toLowerCase() === email.toLowerCase()
+      (report) => report.userEmail?.toLowerCase() === email.toLowerCase()
     )
     .sort(
       (a, b) =>
