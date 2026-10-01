@@ -1,15 +1,23 @@
 import { getAvatarUrl } from "@/lib/panel-permissions"
 
-export type AppUserPlan = "free" | "plus" | "pro"
+/**
+ * The integrating app's own plan name, lowercased by the API. `free` is the
+ * one reserved name and means the user is not paying.
+ */
+export type AppUserPlan = string
+
+export type AppUserPlatform = "ios" | "android" | "web"
 
 export type AppUser = {
   id: string
   name: string
-  email: string
+  /** Null for accounts with no address on file, such as phone sign-in. */
+  email: string | null
   avatar: string
   plan: AppUserPlan
   billingPeriod: "none" | "monthly" | "annual"
-  platform: "ios" | "android" | "web"
+  /** Null when the app did not say which platform the user is on. */
+  platform: AppUserPlatform | null
   status: "active" | "trialing" | "churned"
   renewsAt: string | null
   createdAt: string
@@ -138,15 +146,23 @@ export const DEMO_APP_USERS: AppUser[] = [
   },
 ]
 
+/** `team_annual` and `team-annual` both read as "Team Annual". */
 export function getPlanLabel(plan: AppUserPlan) {
-  switch (plan) {
-    case "pro":
-      return "Stand Pro"
-    case "plus":
-      return "Stand Plus"
-    case "free":
-      return "Free"
-  }
+  return plan
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
+const PLATFORM_LABELS: Record<AppUserPlatform, string> = {
+  ios: "iOS",
+  android: "Android",
+  web: "Web",
+}
+
+export function getPlatformLabel(platform: AppUserPlatform | null) {
+  return platform ? PLATFORM_LABELS[platform] : "Unknown"
 }
 
 export function getSubscriptionLabel(user: AppUser) {
@@ -178,7 +194,9 @@ export function searchAppUsers(users: AppUser[], query: string) {
   }
 
   return users.filter((user) => {
-    const haystack = [user.id, user.name, user.email].join(" ").toLowerCase()
+    const haystack = [user.id, user.name, user.email ?? ""]
+      .join(" ")
+      .toLowerCase()
     return haystack.includes(trimmed)
   })
 }

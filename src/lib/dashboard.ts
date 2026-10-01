@@ -478,7 +478,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   {
     type: "app-users-breakdown",
     title: "Users by plan",
-    description: "How your synced users split across free, plus, and pro.",
+    description: "How your synced users split across your plans.",
     category: "Users",
     permission: "users",
     grid: GRID_PRESETS.list,

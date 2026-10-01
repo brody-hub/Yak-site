@@ -133,7 +133,7 @@ export function DocumentationPage() {
                   ["reports:write", "Create reports, append reporter messages"],
                   ["reports:read", "Read report status and conversation"],
                   ["events:write", "Send analytics events"],
-                  ["users:write", "Create and update app users"],
+                  ["users:write", "Create, update, and delete app users"],
                 ]}
               />
             </DocSection>
@@ -188,14 +188,44 @@ export function DocumentationPage() {
                     "no",
                     "urgent, high, medium, low (default medium)",
                   ],
-                  ["reporter.name", "yes", ""],
-                  ["reporter.email", "yes", "Links to support history"],
-                  ["reporter.externalUserId", "no", "Your own user id"],
-                  ["platform", "no", "ios, android, web (default web)"],
-                  ["appVersion", "no", ""],
+                  ["reporter.name", "yes", "Up to 120 characters"],
+                  [
+                    "reporter.email",
+                    "one of these two",
+                    "A valid address. Leave it out for users who have none",
+                  ],
+                  [
+                    "reporter.externalUserId",
+                    "one of these two",
+                    "Your own user id. Links to support history",
+                  ],
+                  [
+                    "platform",
+                    "no",
+                    "ios, android, or web. Left blank when omitted",
+                  ],
+                  ["appVersion", "no", "Up to 40 characters"],
                   ["metadata", "no", "Arbitrary JSON"],
                 ]}
               />
+              <p>
+                Send at least one of{" "}
+                <code className="font-mono text-xs">reporter.email</code> and{" "}
+                <code className="font-mono text-xs">
+                  reporter.externalUserId
+                </code>
+                . Send both when you have both.
+              </p>
+              <p>
+                To retry safely, add an{" "}
+                <code className="font-mono text-xs">Idempotency-Key</code>{" "}
+                header: any string up to 200 characters that is unique per
+                submission, such as your own feedback id. If the same key
+                arrives again, the first report is returned with{" "}
+                <code className="font-mono text-xs">200</code> instead of{" "}
+                <code className="font-mono text-xs">201</code> and no second
+                ticket or notification is created.
+              </p>
               <p>
                 The response includes a <code className="font-mono text-xs">token</code>.
                 Store it — it is the handle for status and reply calls.
@@ -284,27 +314,56 @@ export function DocumentationPage() {
                 language="json"
                 code={`{ "events": [ { "name": "screen_viewed", "userId": "u_1842" }, … ] }`}
               />
+              <DocTable
+                headers={["Field", "Required", "Notes"]}
+                rows={[
+                  [
+                    "name",
+                    "yes",
+                    "Up to 120 characters. Letters, numbers, and _ . : - only",
+                  ],
+                  [
+                    "userId",
+                    "no",
+                    "Your own user id, the same value as externalId in user sync",
+                  ],
+                  ["userName", "no", "Shown in the live event stream"],
+                  ["anonymousId", "no", "For events before sign-in"],
+                  ["sessionId", "no", ""],
+                  ["platform", "no", "ios, android, or web"],
+                  ["appVersion", "no", "Up to 40 characters"],
+                  [
+                    "properties",
+                    "no",
+                    "Flat object. Values are strings (up to 500 characters), numbers, or booleans",
+                  ],
+                  [
+                    "timestamp",
+                    "no",
+                    "ISO 8601. When the event happened. Defaults to the receipt time",
+                  ],
+                ]}
+              />
               <ul className="text-muted-foreground list-disc space-y-1.5 pl-5 text-sm">
                 <li>
-                  <code className="font-mono text-xs">name</code> may contain
-                  letters, numbers, and{" "}
-                  <code className="font-mono text-xs">_ . : -</code> only.
+                  Nested objects in{" "}
+                  <code className="font-mono text-xs">properties</code> are
+                  rejected.
                 </li>
                 <li>
-                  Property values must be strings, numbers, or booleans — no
-                  nested objects.
-                </li>
-                <li>
-                  Timestamps more than a day in the future or 30 days old are
-                  replaced with receipt time.
+                  A timestamp more than a day in the future or more than 30
+                  days old is replaced with the receipt time. The event is
+                  still accepted, so events older than 30 days cannot be
+                  backfilled onto their original day.
                 </li>
                 <li>
                   Success returns{" "}
                   <code className="font-mono text-xs">202 Accepted</code> with{" "}
                   <code className="font-mono text-xs">
-                    {"{ \"data\": { \"accepted\": n } }"}
+                    {"{ \"data\": { \"accepted\": n, \"clamped\": n } }"}
                   </code>
-                  .
+                  . <code className="font-mono text-xs">clamped</code> is the
+                  number of events whose timestamp was replaced.
                 </li>
                 <li>
                   Validation is all-or-nothing per request so you can fix and
@@ -321,7 +380,10 @@ export function DocumentationPage() {
               </p>
               <p>
                 Idempotent on <code className="font-mono text-xs">externalId</code>
-                , so it is safe to call on every sign-in.
+                , so it is safe to call on every sign-in. Call it when a user
+                signs in and when their subscription changes. You do not need
+                to load your whole user base first: the panel fills in as
+                people use your app.
               </p>
               <CodeBlock
                 language="bash"
@@ -339,9 +401,130 @@ export function DocumentationPage() {
     "renewsAt": "2026-11-12T10:00:00.000Z"
   }'`}
               />
+              <DocTable
+                headers={["Field", "Required", "Notes"]}
+                rows={[
+                  ["externalId", "yes", "Your own user id. Up to 120 characters"],
+                  ["name", "yes", "Up to 120 characters"],
+                  [
+                    "email",
+                    "no",
+                    "A valid address. Leave it out, or send null, for users who have none",
+                  ],
+                  ["avatarUrl", "no", "An image URL"],
+                  [
+                    "plan",
+                    "no",
+                    "Your own plan name, up to 60 characters (default free)",
+                  ],
+                  [
+                    "billingPeriod",
+                    "no",
+                    "none, monthly, or annual (default none)",
+                  ],
+                  [
+                    "platform",
+                    "no",
+                    "ios, android, or web. Left blank when omitted",
+                  ],
+                  [
+                    "status",
+                    "no",
+                    "active, trialing, or churned (default active)",
+                  ],
+                  [
+                    "renewsAt",
+                    "no",
+                    "ISO 8601. Next renewal, or the end of the trial",
+                  ],
+                  [
+                    "createdAt",
+                    "no",
+                    "ISO 8601. When the account was created in your app (default: the first sync)",
+                  ],
+                  [
+                    "notify",
+                    "no",
+                    "false skips the Discord alerts for this call (default true)",
+                  ],
+                  ["metadata", "no", "Arbitrary JSON"],
+                ]}
+              />
               <p>
-                This powers panel user search and subscription details. It also
-                drives Discord triggers:{" "}
+                The body replaces the stored record. A field you leave out goes
+                back to its default, so send everything you know on every call.
+                Unknown fields, a missing{" "}
+                <code className="font-mono text-xs">name</code>, and a malformed{" "}
+                <code className="font-mono text-xs">email</code> are rejected
+                with <code className="font-mono text-xs">422</code>.
+              </p>
+
+              <h4 className="pt-2 font-medium">Plans</h4>
+              <p>
+                Use your own plan names. They are stored in lowercase, so{" "}
+                <code className="font-mono text-xs">Premium</code> and{" "}
+                <code className="font-mono text-xs">premium</code> are one plan.{" "}
+                <code className="font-mono text-xs">free</code> is the one
+                reserved name: it means the user is not paying, and every other
+                plan counts as paid in the dashboard totals.
+              </p>
+
+              <h4 className="pt-2 font-medium">Status</h4>
+              <DocTable
+                headers={["Status", "Meaning"]}
+                rows={[
+                  [
+                    "active",
+                    "Has access now: a paying subscriber, or a user on the free plan",
+                  ],
+                  ["trialing", "In a free trial of a paid plan"],
+                  [
+                    "churned",
+                    "Had a paid subscription or a trial that ended, and has not come back",
+                  ],
+                ]}
+              />
+              <p>
+                A user who never paid is{" "}
+                <code className="font-mono text-xs">active</code> on the{" "}
+                <code className="font-mono text-xs">free</code> plan, not{" "}
+                <code className="font-mono text-xs">churned</code>.
+              </p>
+
+              <h4 className="pt-2 font-medium">Existing accounts</h4>
+              <p>
+                The first sync of a user creates the record and fires the{" "}
+                <code className="font-mono text-xs">new_user</code> Discord
+                alert. For an account that existed before you integrated, send
+                its real <code className="font-mono text-xs">createdAt</code>{" "}
+                and <code className="font-mono text-xs">notify: false</code>, so
+                it is neither announced nor counted as new.
+              </p>
+
+              <h4 className="pt-2 font-medium">Delete a user</h4>
+              <p>
+                <MethodBadge method="DELETE" />{" "}
+                <code className="font-mono text-xs">
+                  /api/v1/users/{"{externalId}"}
+                </code>{" "}
+                — scope <ScopeBadge>users:write</ScopeBadge>
+              </p>
+              <p>
+                Call this when someone deletes their account in your app. It
+                permanently removes the user record, their analytics events,
+                and their support reports with the whole conversation. It
+                cannot be undone. It returns{" "}
+                <code className="font-mono text-xs">200</code> even when there
+                was nothing to delete, so it is safe to retry.
+              </p>
+              <CodeBlock
+                language="json"
+                code={`{ "data": { "deleted": { "user": true, "events": 412, "reports": 2 } } }`}
+              />
+
+              <p>
+                User sync powers panel user search and subscription details. It
+                also drives Discord triggers:{" "}
                 <code className="font-mono text-xs">new_user</code> on first
                 insert, and{" "}
                 <code className="font-mono text-xs">new_subscription</code> when
@@ -444,21 +627,29 @@ function verify(rawBody: string, headers: Record<string, string>, secret: string
             <DocSection id="rate-limits" title="Rate limits">
               <p>
                 Limits are keyed per API key, not per IP, so one integration
-                cannot starve another.
+                cannot starve another. They count requests, not events.
               </p>
               <DocTable
-                headers={["Endpoint group", "Limit"]}
+                headers={["Endpoint group", "Default limit"]}
                 rows={[
                   ["Reports and users", "600 requests/minute"],
-                  [
-                    "Events",
-                    "300 requests/minute (batch to raise throughput)",
-                  ],
+                  ["Events", "300 requests/minute"],
                 ]}
               />
               <p>
+                An events request can carry 200 events, so the default allows
+                60,000 events a minute from a backend that batches. Forwarding
+                one event per request is what runs out. Both limits are
+                settings on the deployment and can be raised for a busier app.
+              </p>
+              <p>
                 Responses carry standard{" "}
                 <code className="font-mono text-xs">RateLimit-*</code> headers.
+              </p>
+              <p>
+                When a request is rejected, Settings → Integrations shows the
+                reason against the key: a missing scope, a validation error
+                with the field name, or a rate limit.
               </p>
             </DocSection>
           </article>

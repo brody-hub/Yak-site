@@ -586,12 +586,28 @@ export type AppUserStats = {
   trialing: number
   churned: number
   paid: number
-  plans: { free: number; plus: number; pro: number }
+  /** Keyed by the integrating app's own plan names. */
+  plans: Record<string, number>
   newInWindow: number
 }
 
 export const appUsersApi = {
-  search: (query: string) => get<AppUser[]>("/api/app-users", { q: query }),
+  /**
+   * An empty query returns the most recently added users. `total` is the size
+   * of the whole roster, however many rows came back.
+   */
+  async list(query: string, signal?: AbortSignal) {
+    const response = await request<AppUser[]>("/api/app-users", {
+      query: { q: query },
+      signal,
+    })
+    const total = response.meta?.total
+
+    return {
+      users: response.data,
+      total: typeof total === "number" ? total : null,
+    }
+  },
   stats: (days = 7) => get<AppUserStats>("/api/app-users/stats", { days }),
   detail: (externalId: string) =>
     get<{ user: AppUser; reports: SupportReport[] }>(
@@ -752,6 +768,9 @@ export type ApiKeySummary = {
   prefix: string
   scopes: string[]
   lastUsedAt: string | null
+  /** The most recent request this key had rejected, with the reason. */
+  lastErrorAt?: string | null
+  lastError?: string | null
   expiresAt: string | null
   revokedAt: string | null
   createdAt: string

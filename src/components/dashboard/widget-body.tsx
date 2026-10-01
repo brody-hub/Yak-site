@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import type { ChartConfig } from "@/components/ui/chart"
 import { formatEventCount, formatEventPercent } from "@/lib/analytics"
+import { getPlanLabel } from "@/lib/app-users"
 import type { WidgetOptionValues } from "@/lib/dashboard"
 import {
   readSource,
@@ -653,7 +654,7 @@ const APP_USER_HINTS: Record<string, string> = {
   active: "Currently active",
   trialing: "In a trial",
   churned: "Lapsed",
-  paid: "On plus or pro",
+  paid: "On a paid plan",
   newInWindow: "Created in window",
 }
 
@@ -712,12 +713,20 @@ function AppUsersBreakdown({ options, sources }: WidgetBodyProps) {
     )
   }
 
+  // Free first, then the app's paid plans from largest to smallest.
+  const planRows = Object.entries(state.data.plans)
+    .sort(([a, countA], [b, countB]) =>
+      a === "free" ? -1 : b === "free" ? 1 : countB - countA
+    )
+    .map(([plan, total]) => ({
+      label: getPlanLabel(plan),
+      value: formatNumber(total),
+    }))
+
   return (
     <WidgetRows
       rows={[
-        { label: "Free", value: formatNumber(state.data.plans.free) },
-        { label: "Plus", value: formatNumber(state.data.plans.plus) },
-        { label: "Pro", value: formatNumber(state.data.plans.pro) },
+        ...planRows,
         { label: "Trialing", value: formatNumber(state.data.trialing) },
         { label: "Churned", value: formatNumber(state.data.churned) },
         {

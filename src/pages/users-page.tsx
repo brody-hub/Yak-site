@@ -15,6 +15,7 @@ import { appUsersApi } from "@/lib/api"
 import {
   formatUserDate,
   getPlanLabel,
+  getPlatformLabel,
   getSubscriptionLabel,
   type AppUser,
 } from "@/lib/app-users"
@@ -38,45 +39,50 @@ const priorityStyles: Record<ReportPriority, string> = {
 export function UsersPage() {
   const [query, setQuery] = React.useState("")
   const [results, setResults] = React.useState<AppUser[]>([])
-  const [searching, setSearching] = React.useState(false)
+  // Size of the whole roster. Null until the first response arrives.
+  const [total, setTotal] = React.useState<number | null>(null)
+  const [searching, setSearching] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
 
   const trimmed = query.trim()
   const hasQuery = trimmed.length > 0
 
-  // Debounced so a search request is not fired on every keystroke.
+  // With no query the API returns the most recently added users, so the page
+  // shows the sync is working before anyone types. A typed search is debounced
+  // so a request is not fired on every keystroke.
   React.useEffect(() => {
-    if (!hasQuery) {
-      setResults([])
-      setSearching(false)
-      setError(null)
-      return
-    }
-
     setSearching(true)
     const controller = new AbortController()
 
-    const timer = setTimeout(() => {
-      appUsersApi
-        .search(trimmed)
-        .then((users) => {
-          if (!controller.signal.aborted) {
-            setResults(users)
-            setError(null)
-          }
-        })
-        .catch(() => {
-          if (!controller.signal.aborted) {
-            setError("Search failed. Try again.")
-          }
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) {
-            setSearching(false)
-          }
-        })
-    }, 250)
+    const timer = setTimeout(
+      () => {
+        appUsersApi
+          .list(trimmed)
+          .then((response) => {
+            if (!controller.signal.aborted) {
+              setResults(response.users)
+              setTotal(response.total)
+              setError(null)
+            }
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) {
+              setError(
+                hasQuery
+                  ? "Search failed. Try again."
+                  : "Could not load users. Try again."
+              )
+            }
+          })
+          .finally(() => {
+            if (!controller.signal.aborted) {
+              setSearching(false)
+            }
+          })
+      },
+      hasQuery ? 250 : 0
+    )
 
     return () => {
       controller.abort()
@@ -91,6 +97,9 @@ export function UsersPage() {
           <h2 className="text-lg font-semibold tracking-tight">Users</h2>
           <p className="text-sm text-muted-foreground">
             Search by name, email, or user ID.
+            {total !== null && total > 0
+              ? ` ${formatUserCount(total)} synced from your app.`
+              : null}
           </p>
         </div>
 
@@ -108,11 +117,7 @@ export function UsersPage() {
         </div>
 
         <div className="space-y-2">
-          {!hasQuery ? (
-            <p className="text-muted-foreground py-10 text-center text-sm">
-              Start typing to find a user.
-            </p>
-          ) : error ? (
+          {error ? (
             <p className="text-destructive py-10 text-center text-sm">
               {error}
             </p>
@@ -124,12 +129,18 @@ export function UsersPage() {
             </div>
           ) : results.length === 0 ? (
             <p className="text-muted-foreground py-10 text-center text-sm">
-              No users match “{trimmed}”.
+              {hasQuery
+                ? `No users match “${trimmed}”.`
+                : total === 0
+                  ? "No users have been synced yet. They appear here once your app calls the user sync endpoint."
+                  : "Start typing to find a user."}
             </p>
           ) : (
             <>
               <p className="text-xs text-muted-foreground">
-                {results.length} result{results.length === 1 ? "" : "s"}
+                {hasQuery
+                  ? `${results.length} result${results.length === 1 ? "" : "s"}`
+                  : "Recently added"}
               </p>
               <ul className="divide-y overflow-hidden rounded-xl border">
                 {results.map((user) => (
@@ -147,18 +158,21 @@ export function UsersPage() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium">{user.name}</div>
                         <div className="truncate text-sm text-muted-foreground">
-                          {user.email}
+                          {user.email ?? "No email on file"}
                         </div>
                         <div className="mt-0.5 font-mono text-xs text-muted-foreground">
                           {user.id}
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1">
-                        <Badge variant="outline" className="capitalize">
-                          {user.plan}
+                        <Badge variant="outline">
+                          {getPlanLabel(user.plan)}
                         </Badge>
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {user.status} · {user.platform}
+                        <span className="text-xs text-muted-foreground">
+                          <span className="capitalize">{user.status}</span>
+                          {user.platform
+                            ? ` · ${getPlatformLabel(user.platform)}`
+                            : null}
                         </span>
                       </div>
                     </button>
@@ -181,6 +195,10 @@ export function UsersPage() {
       />
     </div>
   )
+}
+
+function formatUserCount(total: number) {
+  return `${new Intl.NumberFormat().format(total)} user${total === 1 ? "" : "s"}`
 }
 
 function UserDetailSheet({
@@ -255,7 +273,7 @@ function UserDetailSheet({
                 <div className="min-w-0">
                   <SheetTitle>{user.name}</SheetTitle>
                   <SheetDescription className="truncate">
-                    {user.email}
+                    {user.email ?? "No email on file"}
                   </SheetDescription>
                 </div>
               </div>
@@ -283,7 +301,7 @@ function UserDetailSheet({
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Platform</span>
-                    <span className="capitalize">{user.platform}</span>
+                    <span>{getPlatformLabel(user.platform)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">
