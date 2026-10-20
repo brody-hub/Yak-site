@@ -22,6 +22,12 @@ import type { DashboardWidget } from "@/lib/dashboard"
 import type { DiscordTriggerId } from "@/lib/discord-webhooks"
 import type { IntegrationProviderId } from "@/lib/integrations"
 import type { KpiChartName, KpiOverview, KpiTrend } from "@/lib/kpis"
+import type {
+  SideshiftAnalytics,
+  SideshiftPostSort,
+  SideshiftRange,
+  SideshiftStatus,
+} from "@/lib/sideshift"
 
 export const API_URL = (
   import.meta.env.VITE_API_URL ?? "http://localhost:8080"
@@ -657,6 +663,51 @@ export const integrationsApi = {
   disconnectRevenueCat: async () =>
     (
       await request<ServerIntegration>("/api/integrations/revenuecat", {
+        method: "DELETE",
+      })
+    ).data,
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sideshift                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export const sideshiftApi = {
+  status: () => get<SideshiftStatus>("/api/sideshift/status"),
+
+  analytics: (params: {
+    campaign: string
+    range: SideshiftRange
+    sort: SideshiftPostSort
+  }) => get<SideshiftAnalytics>("/api/sideshift/analytics", params),
+
+  /** Starts a sync in the background; poll `status` for the result. */
+  refresh: async () =>
+    (
+      await request<{ started: true }>("/api/sideshift/refresh", {
+        method: "POST",
+      })
+    ).data,
+
+  saveCampaigns: async (tracked: string[]) =>
+    (
+      await request<SideshiftStatus>("/api/sideshift/campaigns", {
+        method: "PUT",
+        body: { tracked },
+      })
+    ).data,
+
+  /** Returns Sideshift's consent URL. The caller navigates the page to it. */
+  connect: async () =>
+    (
+      await request<{ authorizeUrl: string }>("/api/sideshift/connect", {
+        method: "POST",
+      })
+    ).data,
+
+  disconnect: async () =>
+    (
+      await request<SideshiftStatus>("/api/sideshift/connection", {
         method: "DELETE",
       })
     ).data,

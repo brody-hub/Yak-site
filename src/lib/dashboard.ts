@@ -106,6 +106,7 @@ export type DashboardWidget = {
 
 export type WidgetCategory =
   | "Revenue"
+  | "Marketing"
   | "Analytic Events"
   | "Support"
   | "Tasks"
@@ -178,6 +179,20 @@ function limitOption(label: string, defaultValue: number): WidgetOption {
 /* -------------------------------------------------------------------------- */
 
 export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
+  /* --------------------------------- Marketing --------------------------- */
+  {
+    type: "sideshift-campaigns",
+    title: "Campaigns",
+    description:
+      "Views across your tracked Sideshift campaigns this week, with the top post.",
+    category: "Marketing",
+    permission: "marketing",
+    requires: "sideshift",
+    grid: { w: 4, h: 4, minW: 3, minH: 4, maxW: 6, maxH: 6 },
+    options: [],
+    sources: () => ["sideshift.week"],
+  },
+
   /* ---------------------------------- Revenue ---------------------------- */
   {
     type: "kpi-stat",
@@ -489,6 +504,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
 
 export const WIDGET_CATEGORIES: WidgetCategory[] = [
   "Revenue",
+  "Marketing",
   "Analytic Events",
   "Support",
   "Tasks",

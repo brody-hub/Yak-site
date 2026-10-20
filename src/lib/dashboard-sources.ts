@@ -4,6 +4,7 @@ import {
   appUsersApi,
   kpisApi,
   reportsApi,
+  sideshiftApi,
   tasksApi,
   type AnalyticsSummary,
   type AppUserStats,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/api"
 import type { AnalyticsEvent, DailyEventPoint, EventNameStat } from "@/lib/analytics"
 import type { KpiChartName, KpiOverview, KpiTrend } from "@/lib/kpis"
+import type { SideshiftAnalytics } from "@/lib/sideshift"
 import type { SupportReport } from "@/lib/reports"
 import type { Ticket } from "@/lib/tasks"
 
@@ -71,6 +73,13 @@ async function loadSource(key: SourceKey): Promise<unknown> {
 
     case "appUsers.stats":
       return appUsersApi.stats(Number(args[0] ?? 7))
+
+    case "sideshift.week":
+      return sideshiftApi.analytics({
+        campaign: "all",
+        range: "7d",
+        sort: "views",
+      })
 
     default:
       throw new Error(`Unknown dashboard source: ${key}`)
@@ -136,3 +145,4 @@ export type ReportCountsSource = ReportCounts
 export type ReportsRecentSource = SupportReport[]
 export type TicketsSource = Ticket[]
 export type AppUserStatsSource = AppUserStats
+export type SideshiftWeekSource = SideshiftAnalytics

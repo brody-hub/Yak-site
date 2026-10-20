@@ -18,6 +18,7 @@ import { DashboardPage } from "@/pages/dashboard-page"
 import { AnalyticsPage } from "@/pages/analytics-page"
 import { KpisPage } from "@/pages/kpis-page"
 import { LoginPage } from "@/pages/login-page"
+import { MarketingPage } from "@/pages/marketing-page"
 import { ReportsPage } from "@/pages/reports-page"
 import { ResetPasswordPage } from "@/pages/reset-password-page"
 import { TasksPage } from "@/pages/tasks-page"
@@ -99,6 +100,9 @@ export function App() {
                   </Route>
                   <Route element={<RequirePermission permission="kpis" />}>
                     <Route path="kpis" element={<KpisPage />} />
+                  </Route>
+                  <Route element={<RequirePermission permission="marketing" />}>
+                    <Route path="marketing" element={<MarketingPage />} />
                   </Route>
                   <Route element={<RequirePermission permission="tasks" />}>
                     <Route element={<TasksRoute />}>

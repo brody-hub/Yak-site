@@ -1,4 +1,4 @@
-export type IntegrationProviderId = "revenuecat"
+export type IntegrationProviderId = "revenuecat" | "sideshift"
 
 /**
  * Things a provider unlocks. Dashboard widgets and KPI sections declare the
@@ -8,12 +8,17 @@ export type IntegrationProviderId = "revenuecat"
 export type IntegrationCapability =
   | "subscription-metrics"
   | "revenue-metrics"
+  | "campaign-analytics"
 
 export type IntegrationStep = {
   title: string
   body: string
 }
 
+/**
+ * Providers connected by pasting a key. Sideshift connects over OAuth instead
+ * and has its own card, so it is not listed here.
+ */
 export type IntegrationProvider = {
   id: IntegrationProviderId
   label: string
@@ -72,5 +77,9 @@ export function getIntegrationProvider(id: IntegrationProviderId) {
 }
 
 export function getIntegrationLabel(id: IntegrationProviderId) {
+  if (id === "sideshift") {
+    return "Sideshift"
+  }
+
   return getIntegrationProvider(id)?.label ?? id
 }

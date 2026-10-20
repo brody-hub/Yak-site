@@ -1,4 +1,6 @@
+import * as React from "react"
 import { Link } from "react-router-dom"
+import { EyeIcon } from "lucide-react"
 
 import {
   asChartStyle,
@@ -25,6 +27,7 @@ import {
   type KpiTrendSource,
   type ReportCountsSource,
   type ReportsRecentSource,
+  type SideshiftWeekSource,
   type SourceStates,
   type TicketsSource,
 } from "@/lib/dashboard-sources"
@@ -42,6 +45,7 @@ import {
   type KpiSummaryKey,
 } from "@/lib/kpis"
 import { REPORT_TYPES, type ReportType } from "@/lib/reports"
+import { formatCompact, platformLabel } from "@/lib/sideshift"
 import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@/lib/tasks"
 
 /**
@@ -93,6 +97,8 @@ export function WidgetBody({
       return <AppUsersStat {...props} />
     case "app-users-breakdown":
       return <AppUsersBreakdown {...props} />
+    case "sideshift-campaigns":
+      return <SideshiftCampaigns {...props} />
     default:
       return <WidgetMessage message="This widget is no longer available" />
   }
@@ -735,6 +741,70 @@ function AppUsersBreakdown({ options, sources }: WidgetBodyProps) {
           value: formatNumber(state.data.newInWindow),
         },
       ]}
+    />
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Marketing                                                                   */
+/* -------------------------------------------------------------------------- */
+
+function SideshiftCampaigns({ sources }: WidgetBodyProps) {
+  const state = readSource<SideshiftWeekSource>(sources, "sideshift.week")
+
+  if (state.status === "loading") {
+    return <WidgetLoading lines={3} />
+  }
+
+  if (state.status === "error") {
+    return <WidgetMessage message={state.message} tone="error" />
+  }
+
+  const top = state.data.posts[0]
+
+  return (
+    <Link to="/marketing" className="flex h-full flex-col gap-3">
+      <WidgetStat
+        value={formatCompact(state.data.summary.views)}
+        hint="Views gained this week across tracked campaigns"
+      />
+      {top ? (
+        <div className="flex min-h-0 items-center gap-3 rounded-lg border p-2">
+          <PostThumbnail url={top.thumbnailUrl} />
+          <div className="min-w-0 text-sm">
+            <p className="text-muted-foreground text-xs">Top post this week</p>
+            <p className="truncate font-medium">
+              {top.creatorName ?? top.creatorHandle ?? "Unknown creator"}
+            </p>
+            <p className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+              <EyeIcon className="size-3" />
+              {formatCompact(top.views)} · {platformLabel(top.platform)}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <WidgetMessage message="No new posts this week" />
+      )}
+    </Link>
+  )
+}
+
+/** Falls back to a plain tile when the platform's thumbnail URL has expired. */
+function PostThumbnail({ url }: { url: string | null }) {
+  const [failed, setFailed] = React.useState(false)
+
+  if (!url || failed) {
+    return <div className="bg-muted size-14 shrink-0 rounded-md" />
+  }
+
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className="bg-muted size-14 shrink-0 rounded-md object-cover"
     />
   )
 }
