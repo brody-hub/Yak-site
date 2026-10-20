@@ -126,7 +126,11 @@ export function MarketingPage() {
       return
     }
 
-    const entry = CALLBACK_MESSAGES[outcome] ?? CALLBACK_MESSAGES.error!
+    // `hasOwn`, since the value comes from the URL and "constructor" is a key
+    // on every object.
+    const entry = Object.hasOwn(CALLBACK_MESSAGES, outcome)
+      ? CALLBACK_MESSAGES[outcome]!
+      : CALLBACK_MESSAGES.error!
 
     if (entry.tone === "success") {
       toast.success(entry.message)
