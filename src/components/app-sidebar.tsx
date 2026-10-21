@@ -9,6 +9,7 @@ import {
   KeyRoundIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
+  MegaphoneIcon,
   MessageCircleIcon,
   PaletteIcon,
   UsersIcon,
@@ -43,6 +44,12 @@ const navMain = [
     url: "/kpis",
     icon: <ChartBarIcon />,
     permission: "kpis",
+  },
+  {
+    title: "Marketing",
+    url: "/marketing",
+    icon: <MegaphoneIcon />,
+    permission: "marketing",
   },
   {
     title: "Tasks",

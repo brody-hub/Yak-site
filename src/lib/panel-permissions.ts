@@ -1,6 +1,7 @@
 export type PanelPermissionId =
   | "dashboard"
   | "kpis"
+  | "marketing"
   | "tasks"
   | "users"
   | "reports"
@@ -18,6 +19,7 @@ export type PanelPermission = {
 export const PANEL_PERMISSIONS: PanelPermission[] = [
   { id: "dashboard", label: "Dashboard", group: "Main" },
   { id: "kpis", label: "KPIs", group: "Main" },
+  { id: "marketing", label: "Marketing", group: "Main" },
   { id: "tasks", label: "Tasks", group: "Main" },
   { id: "users", label: "Users", group: "Support" },
   { id: "reports", label: "Reports", group: "Support" },

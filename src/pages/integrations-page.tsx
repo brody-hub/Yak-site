@@ -9,6 +9,7 @@ import {
 } from "@/components/api-key-secret-dialog"
 import { IntegrationCard } from "@/components/integration-card"
 import { useIntegrations } from "@/components/integrations-provider"
+import { SideshiftIntegrationCard } from "@/components/sideshift-integration-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -175,6 +176,11 @@ export function IntegrationsPage() {
           />
         </div>
       ))}
+
+      {/* Sideshift connects over OAuth instead of a pasted key. */}
+      <div className="px-4 lg:px-6">
+        <SideshiftIntegrationCard onChange={refreshIntegrations} />
+      </div>
 
       {/* Outbound: keys your app uses to call this deployment's ingest API. */}
       <div className="px-4 lg:px-6">
