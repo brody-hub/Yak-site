@@ -3,6 +3,10 @@ import { Link } from "react-router-dom"
 import { EyeIcon } from "lucide-react"
 
 import {
+  CorrelationChart,
+  type CorrelationRow,
+} from "@/components/dashboard/correlation-chart"
+import {
   asChartStyle,
   WidgetChart,
 } from "@/components/dashboard/widget-chart"
@@ -16,7 +20,12 @@ import { Badge } from "@/components/ui/badge"
 import type { ChartConfig } from "@/components/ui/chart"
 import { formatEventCount, formatEventPercent } from "@/lib/analytics"
 import { getPlanLabel } from "@/lib/app-users"
-import type { WidgetOptionValues } from "@/lib/dashboard"
+import { bucketByCalendar, OVERLAY_COLORS } from "@/lib/correlation"
+import {
+  kpiTrendKey,
+  sideshiftSeriesKey,
+  type WidgetOptionValues,
+} from "@/lib/dashboard"
 import {
   readSource,
   type AnalyticsSummarySource,
@@ -27,6 +36,7 @@ import {
   type KpiTrendSource,
   type ReportCountsSource,
   type ReportsRecentSource,
+  type SideshiftSeriesSource,
   type SideshiftWeekSource,
   type SourceStates,
   type TicketsSource,
@@ -45,7 +55,12 @@ import {
   type KpiSummaryKey,
 } from "@/lib/kpis"
 import { REPORT_TYPES, type ReportType } from "@/lib/reports"
-import { formatCompact, platformLabel } from "@/lib/sideshift"
+import {
+  decodeCreatorKeys,
+  formatCompact,
+  platformLabel,
+  type SideshiftSeriesPoint,
+} from "@/lib/sideshift"
 import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@/lib/tasks"
 
 /**
@@ -99,6 +114,8 @@ export function WidgetBody({
       return <AppUsersBreakdown {...props} />
     case "sideshift-campaigns":
       return <SideshiftCampaigns {...props} />
+    case "sideshift-correlation":
+      return <SideshiftCorrelation {...props} />
     default:
       return <WidgetMessage message="This widget is no longer available" />
   }
@@ -119,6 +136,14 @@ export function widgetSubtitle(
         : (getKpiSummaryMetric(String(options.metric))?.hint ?? null)
     case "kpi-trend":
       return [KPI_CHART_LABELS[options.chart as KpiChartName], window]
+        .filter(Boolean)
+        .join(" · ")
+    case "sideshift-correlation":
+      return [
+        `${KPI_CHART_LABELS[options.chart as KpiChartName] ?? "Revenue"} as bars`,
+        "views as lines",
+        window,
+      ]
         .filter(Boolean)
         .join(" · ")
     case "analytics-stat":
@@ -786,6 +811,125 @@ function SideshiftCampaigns({ sources }: WidgetBodyProps) {
         <WidgetMessage message="No new posts this week" />
       )}
     </Link>
+  )
+}
+
+/**
+ * RevenueCat bars with Sideshift view lines on the same dates.
+ *
+ * RevenueCat answers by day for a month, by week up to a quarter and by month
+ * beyond, while Sideshift history is always daily. The bars set the calendar,
+ * and each day's views are summed into the bar they fall under so a weekly
+ * revenue bar sits next to that week's views.
+ */
+function SideshiftCorrelation({ options, sources }: WidgetBodyProps) {
+  const chart = (options.chart ?? "revenue") as KpiChartName
+  const trend = readSource<KpiTrendSource>(sources, kpiTrendKey(options))
+  const series = readSource<SideshiftSeriesSource>(sources, sideshiftSeriesKey(options))
+
+  if (trend.status === "loading" || series.status === "loading") {
+    return <WidgetLoading lines={4} />
+  }
+
+  if (series.status === "error") {
+    return <WidgetMessage message={series.message} tone="error" />
+  }
+
+  // The bars are optional: a RevenueCat hiccup still leaves the view lines.
+  const trendNote =
+    trend.status === "error"
+      ? trend.message
+      : !trend.data.connected
+        ? "RevenueCat is not connected"
+        : !trend.data.available
+          ? (trend.data.message ?? "RevenueCat did not return this chart")
+          : null
+  const points =
+    trend.status === "ready" && trend.data.available && trend.data.connected
+      ? trend.data.points
+      : []
+
+  const showCampaign = options.showCampaign !== false
+  const wanted = decodeCreatorKeys(options.creators)
+  const creators = series.data.creators.filter((creator) =>
+    wanted.includes(creator.key)
+  )
+
+  if (!showCampaign && creators.length === 0) {
+    return (
+      <WidgetMessage message="Nothing to overlay yet. Configure the tile to draw the campaign's views or pick a creator." />
+    )
+  }
+
+  // One calendar for every series: the bars' dates, or Sideshift's days when
+  // there are no bars to align to.
+  const calendar =
+    points.length > 0
+      ? points.map((point) => point.date)
+      : series.data.daily.map((point) => point.date)
+
+  if (calendar.length === 0) {
+    return <WidgetMessage message="No data in this window yet" />
+  }
+
+  const lines: { key: string; label: string; daily: SideshiftSeriesPoint[] }[] = []
+
+  if (showCampaign) {
+    lines.push({
+      key: "campaign",
+      label: series.data.campaignName ?? "All campaigns",
+      daily: series.data.daily,
+    })
+  }
+
+  creators.forEach((creator, index) => {
+    lines.push({
+      key: `creator${index}`,
+      label: `${creator.name ?? creator.handle ?? "Unknown creator"} · ${platformLabel(creator.platform)}`,
+      daily: creator.daily,
+    })
+  })
+
+  const bucketed = lines.map((line) => bucketByCalendar(calendar, line.daily))
+  const rows: CorrelationRow[] = calendar.map((date, index) => {
+    const row: CorrelationRow = { date, value: points[index]?.value ?? null }
+
+    lines.forEach((line, lineIndex) => {
+      row[line.key] = bucketed[lineIndex]?.[index] ?? 0
+    })
+
+    return row
+  })
+
+  const config: ChartConfig = {
+    value: { label: KPI_CHART_LABELS[chart], color: "var(--primary)" },
+  }
+
+  lines.forEach((line, index) => {
+    const slot = OVERLAY_COLORS[index % OVERLAY_COLORS.length]!
+    config[line.key] = { label: line.label, theme: slot }
+  })
+
+  const currency = isCurrencyChart(chart)
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      {trendNote ? (
+        <p className="text-muted-foreground text-xs">Bars unavailable: {trendNote}</p>
+      ) : null}
+      <div className="min-h-0 flex-1">
+        <CorrelationChart
+          data={rows}
+          config={config}
+          barKey={points.length > 0 ? "value" : null}
+          lineKeys={lines.map((line) => line.key)}
+          formatBar={(value) =>
+            currency ? formatCurrency(value) : formatNumber(value)
+          }
+          formatLine={formatCompact}
+        />
+      </div>
+    </div>
   )
 }
 

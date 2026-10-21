@@ -13,6 +13,7 @@ import {
   WIDGET_DEFINITIONS,
   type WidgetAvailability,
   type WidgetDefinition,
+  widgetRequirements,
 } from "@/lib/dashboard"
 import { getIntegrationLabel } from "@/lib/integrations"
 import { cn } from "@/lib/utils"
@@ -157,7 +158,7 @@ export function WidgetPalette({
                       locked
                       reason={state.reason}
                       action={
-                        definition.requires && canManageUsers ? (
+                        widgetRequirements(definition).length > 0 && canManageUsers ? (
                           <Button
                             type="button"
                             size="sm"
@@ -228,11 +229,15 @@ function PaletteCard({
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="flex flex-wrap items-center gap-1.5 text-sm leading-tight font-medium">
           {definition.title}
-          {definition.requires ? (
-            <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-              {getIntegrationLabel(definition.requires)}
+          {widgetRequirements(definition).map((integration) => (
+            <Badge
+              key={integration}
+              variant="secondary"
+              className="h-4 px-1.5 text-[10px]"
+            >
+              {getIntegrationLabel(integration)}
             </Badge>
-          ) : null}
+          ))}
         </p>
         <p className="text-muted-foreground line-clamp-2 text-xs">
           {locked && reason ? reason : definition.description}

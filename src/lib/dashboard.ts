@@ -91,6 +91,29 @@ export type WidgetOption =
       default: string
       help?: string
     }
+  /** A single choice whose list comes from the server when the dialog opens. */
+  | {
+      key: string
+      label: string
+      type: "remote-select"
+      source: "sideshift-campaign"
+      default: string
+      help?: string
+    }
+  /**
+   * Several choices from a server list, stored as one encoded string. The
+   * list may depend on another option's value (creators within a campaign).
+   */
+  | {
+      key: string
+      label: string
+      type: "remote-multi"
+      source: "sideshift-creators"
+      dependsOn: string
+      max: number
+      default: string
+      help?: string
+    }
 
 export type WidgetOptionValues = Record<string, string | number | boolean>
 
@@ -117,15 +140,31 @@ export type WidgetDefinition = {
   title: string
   description: string
   category: WidgetCategory
-  /** Section permission the widget's data lives behind. */
-  permission: PanelPermissionId
-  /** Integration that must be connected before the widget can show anything. */
-  requires?: IntegrationProviderId
+  /** Section permission(s) the widget's data lives behind. */
+  permission: PanelPermissionId | PanelPermissionId[]
+  /** Integration(s) that must be connected before the widget can show anything. */
+  requires?: IntegrationProviderId | IntegrationProviderId[]
   /** Starting footprint and resize limits on the board. */
   grid: WidgetGrid
   options: WidgetOption[]
   /** Data keys the widget needs once its options are resolved. */
   sources: (options: WidgetOptionValues) => string[]
+}
+
+export function widgetPermissions(definition: WidgetDefinition): PanelPermissionId[] {
+  return Array.isArray(definition.permission)
+    ? definition.permission
+    : [definition.permission]
+}
+
+export function widgetRequirements(
+  definition: WidgetDefinition
+): IntegrationProviderId[] {
+  if (!definition.requires) {
+    return []
+  }
+
+  return Array.isArray(definition.requires) ? definition.requires : [definition.requires]
 }
 
 /* -------------------------------------------------------------------------- */
@@ -178,8 +217,74 @@ function limitOption(label: string, defaultValue: number): WidgetOption {
 /* Catalogue                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/** Creators one views-vs-revenue tile may overlay on top of the campaign line. */
+export const CORRELATION_MAX_CREATORS = 3
+
+/**
+ * Source key for a views-vs-revenue tile's Sideshift series. Ids are
+ * URI-encoded because the key is split on ":".
+ */
+export function sideshiftSeriesKey(options: WidgetOptionValues) {
+  const campaign = encodeURIComponent(String(options.campaign ?? "all"))
+  const creators = encodeURIComponent(String(options.creators ?? ""))
+
+  return `sideshift.series:${campaign}:${Number(options.days ?? 30)}:${creators}`
+}
+
+export function kpiTrendKey(options: WidgetOptionValues) {
+  return `kpi.trend:${String(options.chart ?? "revenue")}:${Number(options.days ?? 30)}`
+}
+
 export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   /* --------------------------------- Marketing --------------------------- */
+  {
+    type: "sideshift-correlation",
+    title: "Views vs revenue",
+    description:
+      "A RevenueCat series as bars with Sideshift views drawn over it on the same days: a campaign's total, and up to three creators.",
+    category: "Marketing",
+    permission: ["marketing", "kpis"],
+    requires: ["sideshift", "revenuecat"],
+    grid: { w: 12, h: 8, minW: 6, minH: 5, maxW: 12, maxH: 14 },
+    options: [
+      {
+        key: "chart",
+        label: "Bars",
+        type: "select",
+        choices: KPI_CHARTS.map((chart) => ({
+          value: chart,
+          label: KPI_CHART_LABELS[chart],
+        })),
+        default: "revenue",
+        help: "The RevenueCat series drawn as bars. New customers is the closest RevenueCat has to new users.",
+      },
+      windowOption(30),
+      {
+        key: "campaign",
+        label: "Campaign",
+        type: "remote-select",
+        source: "sideshift-campaign",
+        default: "all",
+      },
+      {
+        key: "showCampaign",
+        label: "Draw the campaign's total views",
+        type: "boolean",
+        default: true,
+      },
+      {
+        key: "creators",
+        label: "Creators to overlay",
+        type: "remote-multi",
+        source: "sideshift-creators",
+        dependsOn: "campaign",
+        max: CORRELATION_MAX_CREATORS,
+        default: "",
+        help: "Each creator gets their own line in its own colour.",
+      },
+    ],
+    sources: (options) => [kpiTrendKey(options), sideshiftSeriesKey(options)],
+  },
   {
     type: "sideshift-campaigns",
     title: "Campaigns",
@@ -272,9 +377,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
       windowOption(30),
       chartStyleOption(),
     ],
-    sources: (options) => [
-      `kpi.trend:${String(options.chart ?? "revenue")}:${Number(options.days ?? 30)}`,
-    ],
+    sources: (options) => [kpiTrendKey(options)],
   },
   {
     type: "kpi-metrics-table",
@@ -579,6 +682,16 @@ export function resolveWidgetOptions(
       continue
     }
 
+    // Remote lists are not known here; the server rejects an id it no longer
+    // tracks and the tile shows that.
+    if (
+      (option.type === "remote-select" || option.type === "remote-multi") &&
+      typeof value === "string"
+    ) {
+      resolved[option.key] = value
+      continue
+    }
+
     if (
       option.type === "select" &&
       typeof value === "string" &&
@@ -812,20 +925,25 @@ export function widgetAvailability(
     integrationLabel: (id: IntegrationProviderId) => string
   }
 ): WidgetAvailability {
-  if (!context.can(definition.permission)) {
+  const missingPermission = widgetPermissions(definition).find(
+    (permission) => !context.can(permission)
+  )
+
+  if (missingPermission) {
     return {
       available: false,
-      reason: `Needs access to the ${definition.permission} section`,
+      reason: `Needs access to the ${missingPermission} section`,
     }
   }
 
-  if (
-    definition.requires &&
-    !context.connectedIntegrations.includes(definition.requires)
-  ) {
+  const missingIntegration = widgetRequirements(definition).find(
+    (integration) => !context.connectedIntegrations.includes(integration)
+  )
+
+  if (missingIntegration) {
     return {
       available: false,
-      reason: `Connect ${context.integrationLabel(definition.requires)} in Settings → Integrations`,
+      reason: `Connect ${context.integrationLabel(missingIntegration)} in Settings → Integrations`,
     }
   }
 
@@ -854,13 +972,14 @@ export function defaultLayout(context: {
       return
     }
 
-    if (!context.can(definition.permission)) {
+    if (!widgetPermissions(definition).every((permission) => context.can(permission))) {
       return
     }
 
     if (
-      definition.requires &&
-      !context.connectedIntegrations.includes(definition.requires)
+      !widgetRequirements(definition).every((integration) =>
+        context.connectedIntegrations.includes(integration)
+      )
     ) {
       return
     }
