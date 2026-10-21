@@ -82,6 +82,52 @@ export type SideshiftAnalytics = {
   posts: SideshiftPost[]
 }
 
+export type SideshiftSeriesPoint = { date: string; views: number }
+
+/** Daily views for the dashboard's views-vs-revenue tile. */
+export type SideshiftSeries = {
+  campaign: string
+  /** Null for "all tracked campaigns". */
+  campaignName: string | null
+  days: number
+  daily: SideshiftSeriesPoint[]
+  creators: {
+    key: string
+    /** Null when nothing in the window matched the key. */
+    name: string | null
+    handle: string | null
+    platform: string
+    avatarUrl: string | null
+    daily: SideshiftSeriesPoint[]
+  }[]
+}
+
+/**
+ * A widget stores its chosen creators as one string so the option fits the
+ * dashboard's flat option values. Keys are URI-encoded before joining because
+ * a handle may contain a comma.
+ */
+export function encodeCreatorKeys(keys: string[]) {
+  return keys.map((key) => encodeURIComponent(key)).join(",")
+}
+
+export function decodeCreatorKeys(value: unknown): string[] {
+  if (typeof value !== "string" || !value) {
+    return []
+  }
+
+  return value
+    .split(",")
+    .filter(Boolean)
+    .map((entry) => {
+      try {
+        return decodeURIComponent(entry)
+      } catch {
+        return entry
+      }
+    })
+}
+
 export const RANGE_OPTIONS: { value: SideshiftRange; label: string }[] = [
   { value: "7d", label: "7d" },
   { value: "30d", label: "30d" },

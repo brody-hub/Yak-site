@@ -12,7 +12,7 @@ import {
 } from "@/lib/api"
 import type { AnalyticsEvent, DailyEventPoint, EventNameStat } from "@/lib/analytics"
 import type { KpiChartName, KpiOverview, KpiTrend } from "@/lib/kpis"
-import type { SideshiftAnalytics } from "@/lib/sideshift"
+import type { SideshiftAnalytics, SideshiftSeries } from "@/lib/sideshift"
 import type { SupportReport } from "@/lib/reports"
 import type { Ticket } from "@/lib/tasks"
 
@@ -81,6 +81,14 @@ async function loadSource(key: SourceKey): Promise<unknown> {
         sort: "views",
       })
 
+    // Both ids are URI-encoded in the key so a stray ":" cannot split them.
+    case "sideshift.series":
+      return sideshiftApi.series({
+        campaign: decodeURIComponent(args[0] ?? "all"),
+        days: Number(args[1] ?? 30),
+        creators: decodeURIComponent(args[2] ?? ""),
+      })
+
     default:
       throw new Error(`Unknown dashboard source: ${key}`)
   }
@@ -146,3 +154,4 @@ export type ReportsRecentSource = SupportReport[]
 export type TicketsSource = Ticket[]
 export type AppUserStatsSource = AppUserStats
 export type SideshiftWeekSource = SideshiftAnalytics
+export type SideshiftSeriesSource = SideshiftSeries

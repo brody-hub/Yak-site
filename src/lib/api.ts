@@ -26,6 +26,7 @@ import type {
   SideshiftAnalytics,
   SideshiftPostSort,
   SideshiftRange,
+  SideshiftSeries,
   SideshiftStatus,
 } from "@/lib/sideshift"
 
@@ -680,6 +681,10 @@ export const sideshiftApi = {
     range: SideshiftRange
     sort: SideshiftPostSort
   }) => get<SideshiftAnalytics>("/api/sideshift/analytics", params),
+
+  /** `creators` is the stored option value: encoded keys joined by commas. */
+  series: (params: { campaign: string; days: number; creators: string }) =>
+    get<SideshiftSeries>("/api/sideshift/series", params),
 
   /** Starts a sync in the background; poll `status` for the result. */
   refresh: async () =>
