@@ -1,6 +1,7 @@
 import * as React from "react"
 import { SearchIcon } from "lucide-react"
 
+import { useCurrentApp } from "@/components/apps-provider"
 import { Badge } from "@/components/ui/badge"
 import {
   Sheet,
@@ -37,6 +38,7 @@ const priorityStyles: Record<ReportPriority, string> = {
 }
 
 export function UsersPage() {
+  const { id: appId } = useCurrentApp()
   const [query, setQuery] = React.useState("")
   const [results, setResults] = React.useState<AppUser[]>([])
   // Size of the whole roster. Null until the first response arrives.
@@ -58,7 +60,7 @@ export function UsersPage() {
     const timer = setTimeout(
       () => {
         appUsersApi
-          .list(trimmed)
+          .list(appId, trimmed)
           .then((response) => {
             if (!controller.signal.aborted) {
               setResults(response.users)
@@ -88,7 +90,7 @@ export function UsersPage() {
       controller.abort()
       clearTimeout(timer)
     }
-  }, [trimmed, hasQuery])
+  }, [appId, trimmed, hasQuery])
 
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
@@ -210,6 +212,7 @@ function UserDetailSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { id: appId } = useCurrentApp()
   const [user, setUser] = React.useState<AppUser | null>(null)
   const [supportHistory, setSupportHistory] = React.useState<SupportReport[]>(
     []
@@ -228,7 +231,7 @@ function UserDetailSheet({
     setUser(null)
 
     appUsersApi
-      .detail(userId)
+      .detail(appId, userId)
       .then((detail) => {
         if (!cancelled) {
           setUser(detail.user)
@@ -250,7 +253,7 @@ function UserDetailSheet({
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [appId, userId])
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

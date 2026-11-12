@@ -22,6 +22,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Card,
   CardContent,
   CardDescription,
@@ -80,7 +88,8 @@ const POLL_MS = 3_000
 const POLL_BUDGET = 5
 
 export function MarketingPage() {
-  const { canManageUsers } = useAuth()
+  const { canManageUsers, user } = useAuth()
+  const tenant = user?.tenant ?? null
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [status, setStatus] = React.useState<SideshiftStatus | null>(null)
@@ -101,6 +110,13 @@ export function MarketingPage() {
   const [refreshing, setRefreshing] = React.useState(false)
 
   const pollBudget = React.useRef(POLL_BUDGET)
+  const [confirming, setConfirming] = React.useState(false)
+  // A consent Sideshift sent back, waiting for the user to confirm it. Kept in
+  // the URL until they do (or cancel), so nothing finishes it implicitly.
+  const pendingConfirm =
+    searchParams.get("sideshift") === "confirm"
+      ? searchParams.get("sideshift_state") || null
+      : null
   const wasSyncing = React.useRef(false)
 
   const loadStatus = React.useCallback(async () => {
@@ -118,13 +134,21 @@ export function MarketingPage() {
     void loadStatus()
   }, [loadStatus])
 
-  // Sideshift redirects back here with the outcome of a Connect click.
+  // Sideshift redirects back here with the outcome of a Connect click. A
+  // successful consent arrives as `confirm` with the state, and only finishes
+  // once this signed-in session (the one that clicked Connect) confirms it.
   React.useEffect(() => {
     const outcome = searchParams.get("sideshift")
 
-    if (!outcome) {
+    // `confirm` waits for a click in the dialog below.
+    if (!outcome || outcome === "confirm") {
       return
     }
+
+    const next = new URLSearchParams(searchParams)
+    next.delete("sideshift")
+    next.delete("sideshift_state")
+    setSearchParams(next, { replace: true })
 
     // `hasOwn`, since the value comes from the URL and "constructor" is a key
     // on every object.
@@ -138,11 +162,86 @@ export function MarketingPage() {
     } else {
       toast.error(entry.message)
     }
+  }, [searchParams, setSearchParams])
 
+  const clearPendingConfirm = () => {
     const next = new URLSearchParams(searchParams)
     next.delete("sideshift")
+    next.delete("sideshift_state")
     setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
+  }
+
+  const confirmConnection = async () => {
+    const state = pendingConfirm
+
+    if (!state || confirming) {
+      return
+    }
+
+    setConfirming(true)
+
+    try {
+      const result = await sideshiftApi.complete(state)
+      const entry = Object.hasOwn(CALLBACK_MESSAGES, result)
+        ? CALLBACK_MESSAGES[result]!
+        : CALLBACK_MESSAGES.error!
+
+      if (entry.tone === "success") {
+        toast.success(entry.message)
+        pollBudget.current = POLL_BUDGET
+      } else {
+        toast.error(entry.message)
+      }
+
+      void loadStatus()
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : "Could not finish connecting Sideshift"
+      )
+    } finally {
+      setConfirming(false)
+      clearPendingConfirm()
+    }
+  }
+
+  const confirmDialog = (
+    <Dialog
+      open={pendingConfirm !== null}
+      onOpenChange={(open) => {
+        if (!open && !confirming) {
+          clearPendingConfirm()
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Finish connecting Sideshift?</DialogTitle>
+          <DialogDescription>
+            {`This connects the Sideshift company you just approved to ${tenant?.name ?? "this workspace"}. Only continue if you clicked Connect yourself.`}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={confirming}
+            onClick={clearPendingConfirm}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={confirming}
+            onClick={() => void confirmConnection()}
+          >
+            {confirming ? "Connecting…" : "Connect"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 
   // Poll while a sync runs, and briefly after load when one is probably about
   // to start. When it finishes, reload the numbers.
@@ -269,6 +368,7 @@ export function MarketingPage() {
             <Skeleton className="h-64" />
           </div>
         )}
+        {confirmDialog}
       </PageFrame>
     )
   }
@@ -281,6 +381,7 @@ export function MarketingPage() {
           connecting={connecting}
           onConnect={() => void connect()}
         />
+        {confirmDialog}
       </PageFrame>
     )
   }
@@ -440,6 +541,7 @@ export function MarketingPage() {
           setReloadKey((key) => key + 1)
         }}
       />
+      {confirmDialog}
     </PageFrame>
   )
 }

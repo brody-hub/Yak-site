@@ -4,6 +4,7 @@ import * as React from "react"
 import {
   activityApi,
   systemUsersApi,
+  type CurrentUser,
   type InviteResult,
   type ServerActivityEntry,
   type ServerSystemUser,
@@ -47,7 +48,7 @@ type SystemUsersProviderState = {
   getUser: (id: string) => ServerSystemUser | undefined
   getUserActivity: (userId: string) => ServerActivityEntry[]
   /** Merges a fresher user record into the roster (e.g. after avatar upload). */
-  syncUser: (user: ServerSystemUser) => void
+  syncUser: (user: ServerSystemUser | CurrentUser) => void
 }
 
 const SystemUsersContext = React.createContext<
@@ -87,11 +88,22 @@ export function SystemUsersProvider({ children }: SystemUsersProviderProps) {
     void refresh()
   }, [refresh])
 
-  const syncUser = React.useCallback((updated: ServerSystemUser) => {
-    setUsers((current) =>
-      current.map((user) => (user.id === updated.id ? updated : user))
-    )
-  }, [])
+  const syncUser = React.useCallback(
+    (updated: ServerSystemUser | CurrentUser) => {
+      // The signed-in user's own profile can arrive here. Super admins are
+      // never on a workspace roster, so there is nothing to replace.
+      if (updated.role === "super_admin") {
+        return
+      }
+
+      const row: ServerSystemUser = { ...updated, role: updated.role }
+
+      setUsers((current) =>
+        current.map((user) => (user.id === row.id ? row : user))
+      )
+    },
+    []
+  )
 
   const inviteUser = React.useCallback(async (input: InviteInput) => {
     const result = await systemUsersApi.invite(input)
@@ -145,8 +157,7 @@ export function SystemUsersProvider({ children }: SystemUsersProviderProps) {
   )
 
   const getUserActivity = React.useCallback(
-    (userId: string) =>
-      activityLog.filter((entry) => entry.userId === userId),
+    (userId: string) => activityLog.filter((entry) => entry.userId === userId),
     [activityLog]
   )
 

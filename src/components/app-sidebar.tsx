@@ -5,9 +5,11 @@ import {
   BookOpenIcon,
   ChartBarIcon,
   CommandIcon,
+  CreditCardIcon,
   HeadphonesIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
+  LayoutGridIcon,
   ListChecksIcon,
   MegaphoneIcon,
   MessageCircleIcon,
@@ -16,6 +18,7 @@ import {
   UsersRoundIcon,
 } from "lucide-react"
 
+import { AppSwitcher } from "@/components/app-switcher"
 import { useAuth } from "@/components/auth-provider"
 import { useBranding } from "@/components/branding-provider"
 import { NavDocuments } from "@/components/nav-documents"
@@ -122,6 +125,18 @@ const settings = [
     requireManageUsers: true,
   },
   {
+    name: "Apps",
+    url: "/settings/apps",
+    icon: <LayoutGridIcon />,
+    requireManageUsers: true,
+  },
+  {
+    name: "Billing",
+    url: "/settings/billing",
+    icon: <CreditCardIcon />,
+    requireManageUsers: true,
+  },
+  {
     name: "Documentation",
     url: "/settings/documentation",
     icon: <BookOpenIcon />,
@@ -172,6 +187,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        {/* Users, reports, analytics, KPIs and keys follow this choice. */}
+        <AppSwitcher />
       </SidebarHeader>
       <SidebarContent>
         {visibleMain.length > 0 ? <NavMain items={visibleMain} /> : null}

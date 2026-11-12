@@ -9,6 +9,7 @@ import {
   UsersIcon,
 } from "lucide-react"
 
+import { useCurrentApp } from "@/components/apps-provider"
 import { useAuth } from "@/components/auth-provider"
 import {
   asChartStyle,
@@ -87,6 +88,7 @@ const SECTION_CHART: Record<KpiSectionId, KpiChartName> = {
 }
 
 export function KpisPage() {
+  const { id: appId } = useCurrentApp()
   const { canManageUsers } = useAuth()
   const { isConnected, status: integrationsStatus } = useIntegrations()
   const revenueCatConnected = isConnected("revenuecat")
@@ -100,7 +102,7 @@ export function KpisPage() {
     setLoading(true)
 
     try {
-      setOverview(await kpisApi.overview())
+      setOverview(await kpisApi.overview(appId))
       setError(null)
     } catch (err) {
       setError(
@@ -109,7 +111,7 @@ export function KpisPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [appId])
 
   React.useEffect(() => {
     void load()
@@ -280,6 +282,7 @@ function TrendCard({
   defaultChart: KpiChartName
   currency: string
 }) {
+  const { id: appId } = useCurrentApp()
   const [chart, setChart] = React.useState<KpiChartName>(defaultChart)
   const [days, setDays] = React.useState("30")
   const [style, setStyle] = React.useState("area")
@@ -297,7 +300,7 @@ function TrendCard({
 
     const load = async () => {
       try {
-        const result = await kpisApi.trend(chart, Number(days))
+        const result = await kpisApi.trend(appId, chart, Number(days))
 
         if (!cancelled) {
           setTrend(result)
@@ -321,7 +324,7 @@ function TrendCard({
     return () => {
       cancelled = true
     }
-  }, [chart, days])
+  }, [appId, chart, days])
 
   const config = {
     value: { label: KPI_CHART_LABELS[chart], color: "var(--primary)" },

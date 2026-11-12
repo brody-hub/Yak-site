@@ -1,15 +1,17 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 
+import { useApps } from "@/components/apps-provider"
 import { ApiError, integrationsApi, type ServerIntegration } from "@/lib/api"
 import type { IntegrationProviderId } from "@/lib/integrations"
 
 /**
  * Connection state for the third party providers Stand reads metrics from.
  *
- * Loaded once per session and shared, because both the dashboard (to decide
- * which widgets can produce data) and the KPIs page (to decide between real
- * numbers and a connect prompt) depend on it. The API never returns a stored
+ * RevenueCat is connected per app, so the list follows the current app and is
+ * reloaded when it changes. Shared because both the dashboard (to decide which
+ * widgets can produce data) and the KPIs page (to decide between real numbers
+ * and a connect prompt) depend on it. The API never returns a stored
  * credential, so nothing sensitive lives in this context.
  */
 
@@ -27,34 +29,86 @@ const IntegrationsContext = React.createContext<IntegrationsState | undefined>(
   undefined
 )
 
+type Loaded = {
+  appId: string | null
+  status: "ready" | "error"
+  integrations: ServerIntegration[]
+  error: string | null
+}
+
+/** Shared empty list so "nothing loaded" keeps one identity across renders. */
+const NONE: ServerIntegration[] = []
+
+/** Never throws: a failure is a state the panel shows, not an exception. */
+async function fetchIntegrations(appId: string): Promise<Loaded> {
+  try {
+    const integrations = await integrationsApi.list(appId)
+    return { appId, status: "ready", integrations, error: null }
+  } catch (err) {
+    return {
+      appId,
+      status: "error",
+      integrations: NONE,
+      error:
+        err instanceof ApiError
+          ? err.message
+          : "Could not load integration status",
+    }
+  }
+}
+
 export function IntegrationsProvider({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const [status, setStatus] =
-    React.useState<IntegrationsState["status"]>("loading")
-  const [integrations, setIntegrations] = React.useState<ServerIntegration[]>([])
-  const [error, setError] = React.useState<string | null>(null)
+  const { status: appsStatus, currentApp } = useApps()
+  const appId = currentApp?.id ?? null
+
+  const [loaded, setLoaded] = React.useState<Loaded | null>(null)
+
+  // Fetched on mount and whenever the app changes. State is only written from
+  // the resolved promise, and a result for an app that is no longer current is
+  // dropped on arrival rather than shown briefly.
+  React.useEffect(() => {
+    if (!appId) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchIntegrations(appId).then((result) => {
+      if (!cancelled) {
+        setLoaded(result)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [appId])
 
   const refresh = React.useCallback(async () => {
-    try {
-      setIntegrations(await integrationsApi.list())
-      setError(null)
-      setStatus("ready")
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "Could not load integration status"
-      )
-      setStatus("error")
+    if (appId) {
+      setLoaded(await fetchIntegrations(appId))
     }
-  }, [])
+  }, [appId])
 
-  React.useEffect(() => {
-    void refresh()
-  }, [refresh])
+  // A result for a different app is stale; report loading until the right one
+  // arrives. With no app at all there is nothing to connect, so it is "ready"
+  // with nothing connected.
+  const current: Loaded | null =
+    appsStatus === "loading"
+      ? null
+      : !appId
+        ? { appId: null, status: "ready", integrations: NONE, error: null }
+        : loaded && loaded.appId === appId
+          ? loaded
+          : null
+
+  const status = current?.status ?? "loading"
+  const integrations = current?.integrations ?? NONE
+  const error = current?.error ?? null
 
   const connected = React.useMemo(
     () =>
