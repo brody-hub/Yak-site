@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom"
 
 import { useAuth } from "@/components/auth-provider"
 import { ChangePasswordPage } from "@/pages/change-password-page"
+import { LandingPage } from "@/pages/landing-page"
 import { permissionPath, type PanelPermissionId } from "@/lib/panel-permissions"
 
 function FullPageSpinner() {
@@ -19,6 +20,7 @@ function FullPageSpinner() {
 /**
  * Gate for everything inside the panel: requires a session, and blocks the
  * whole app behind the password change screen for freshly invited accounts.
+ * Signed out, the site's root is the landing page rather than a bare sign in.
  */
 export function RequireAuth() {
   const { status, mustChangePassword, tenantSuspended } = useAuth()
@@ -29,6 +31,10 @@ export function RequireAuth() {
   }
 
   if (status === "unauthenticated") {
+    if (location.pathname === "/") {
+      return <LandingPage />
+    }
+
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 

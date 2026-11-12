@@ -1,8 +1,12 @@
 import * as React from "react"
-import { CheckIcon } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
+import { CheckIcon, ExternalLinkIcon } from "lucide-react"
+import { toast } from "sonner"
 
 import { useAuth } from "@/components/auth-provider"
+import { IntervalToggle } from "@/components/plan-cards"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -24,21 +28,50 @@ import {
   billingApi,
   type BillingPlan,
   type BillingSummary,
+  type PlanTierId,
 } from "@/lib/api"
+import {
+  type BillingInterval,
+  formatHistory,
+  formatNumber,
+  formatPrice,
+  isCheckoutPlan,
+  mauRange,
+  planName,
+} from "@/lib/plans"
 import { cn } from "@/lib/utils"
 
 /**
- * The plan, the live MAU meter that sets it, and the tier ladder. Yak charges
- * by monthly active users added up across every app in the workspace; paid
- * tiers follow the peak of the last two full months so one spike does not
- * change the bill. Payments are not wired up yet, so nothing here changes the
- * plan: that goes through support until Stripe is connected.
+ * The plan, the live MAU meter, and the tier ladder, with the doors to
+ * Stripe: Checkout to start paying for a tier, the customer portal to change
+ * or cancel one. The tier itself only moves when Stripe's webhook says so,
+ * which is why a finished checkout waits here for it.
  */
 export function BillingPage() {
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [summary, setSummary] = React.useState<BillingSummary | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [interval, setBillingInterval] =
+    React.useState<BillingInterval>("monthly")
+  const [redirecting, setRedirecting] = React.useState<string | null>(null)
+
+  const load = React.useCallback(async () => {
+    try {
+      const result = await billingApi.get()
+      setSummary(result)
+      setError(null)
+      return result
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError ? caught.message : "Could not load billing"
+      )
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   React.useEffect(() => {
     let cancelled = false
@@ -49,6 +82,9 @@ export function BillingPage() {
         if (!cancelled) {
           setSummary(result)
           setError(null)
+          if (result.pendingInterval) {
+            setBillingInterval(result.pendingInterval)
+          }
         }
       })
       .catch((caught: unknown) => {
@@ -71,6 +107,76 @@ export function BillingPage() {
     }
   }, [])
 
+  // Back from Stripe. The webhook usually lands within seconds of the
+  // redirect, so look again a few times before calling it pending.
+  const checkout = searchParams.get("checkout")
+
+  React.useEffect(() => {
+    if (!checkout) {
+      return
+    }
+
+    setSearchParams({}, { replace: true })
+
+    if (checkout === "cancelled") {
+      toast("Checkout cancelled. Nothing was charged.")
+      return
+    }
+
+    if (checkout !== "success") {
+      return
+    }
+
+    let cancelled = false
+    let attempts = 0
+
+    async function poll() {
+      const result = await load()
+      attempts += 1
+
+      if (cancelled) {
+        return
+      }
+
+      if (result?.hasSubscription) {
+        toast.success(`You are on ${result.plan.name}. Thank you!`)
+        return
+      }
+
+      if (attempts < 6) {
+        setTimeout(() => void poll(), 2000)
+      } else {
+        toast("Payment received. Your plan will update in a moment.")
+      }
+    }
+
+    void poll()
+
+    return () => {
+      cancelled = true
+    }
+  }, [checkout, load, setSearchParams])
+
+  async function goToStripe(action: () => Promise<string>, label: string) {
+    setRedirecting(label)
+
+    try {
+      window.location.assign(await action())
+    } catch (caught) {
+      toast.error(
+        caught instanceof ApiError ? caught.message : "Could not open Stripe"
+      )
+      setRedirecting(null)
+    }
+  }
+
+  function startCheckout(plan: PlanTierId, chosenInterval: BillingInterval) {
+    void goToStripe(
+      () => billingApi.checkout({ plan, interval: chosenInterval }),
+      plan
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-4 px-4 py-6 lg:px-6">
@@ -89,7 +195,9 @@ export function BillingPage() {
     )
   }
 
-  const { plan, plans, usage, paymentsEnabled } = summary
+  const { plan, plans, usage, paymentsEnabled, hasSubscription, pendingPlan } =
+    summary
+  const canCheckout = paymentsEnabled && !hasSubscription
   const suggested = plans.find((tier) => tier.id === usage.suggestedPlanId)
   const suggestsChange = suggested && suggested.id !== plan.id
   const capPercent =
@@ -99,6 +207,50 @@ export function BillingPage() {
 
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+      {pendingPlan && canCheckout ? (
+        <div className="px-4 lg:px-6">
+          <Card className="border-primary/40">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                <CardTitle>Finish upgrading to {planName(plans, pendingPlan)}</CardTitle>
+                <CardDescription>
+                  You picked {planName(plans, pendingPlan)} (
+                  {summary.pendingInterval ?? "monthly"}) when you signed up.
+                  You are on Free until payment goes through.
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="ghost"
+                  disabled={redirecting !== null}
+                  onClick={() => {
+                    void billingApi
+                      .dismissPending()
+                      .then(() => load())
+                      .catch(() => toast.error("Could not update your plan"))
+                  }}
+                >
+                  Stay on Free
+                </Button>
+                <Button
+                  disabled={redirecting !== null}
+                  onClick={() =>
+                    startCheckout(
+                      pendingPlan,
+                      summary.pendingInterval ?? "monthly"
+                    )
+                  }
+                >
+                  {redirecting === pendingPlan
+                    ? "Opening checkout…"
+                    : "Continue to payment"}
+                </Button>
+              </div>
+            </CardHeader>
+          </Card>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 px-4 lg:grid-cols-2 lg:px-6">
         <Card>
           <CardHeader>
@@ -132,10 +284,30 @@ export function BillingPage() {
                 {plan.support === "email" ? "Email" : "Documentation"}
               </Limit>
             </dl>
+            {summary.subscriptionStatus === "past_due" ? (
+              <p className="rounded-lg border border-orange-500/40 bg-orange-500/5 p-3 text-sm">
+                Your last payment did not go through. Update your card in
+                Manage billing to keep {plan.name}.
+              </p>
+            ) : null}
+            {hasSubscription && paymentsEnabled ? (
+              <Button
+                variant="outline"
+                disabled={redirecting !== null}
+                onClick={() =>
+                  void goToStripe(() => billingApi.portal(), "portal")
+                }
+              >
+                <ExternalLinkIcon />
+                {redirecting === "portal" ? "Opening…" : "Manage billing"}
+              </Button>
+            ) : null}
             <p className="text-xs text-muted-foreground">
-              {paymentsEnabled
-                ? "Plan changes take effect from the next billing cycle."
-                : `Online payments are not available yet. To change ${user?.tenant?.name ?? "this workspace"}'s plan, contact support.`}
+              {!paymentsEnabled
+                ? `Online payments are not available yet. To change ${user?.tenant?.name ?? "this workspace"}'s plan, contact support.`
+                : hasSubscription
+                  ? "Change plan, update your card, see invoices or cancel in Manage billing."
+                  : "Choose a plan below to pay by card through Stripe."}
             </p>
           </CardContent>
         </Card>
@@ -176,9 +348,11 @@ export function BillingPage() {
               <p className="rounded-lg border bg-muted/40 p-3 text-sm">
                 Based on the billable peak, this workspace fits the{" "}
                 <span className="font-medium">{suggested.name}</span> tier.
-                {paymentsEnabled
-                  ? " Yak moves accounts automatically with notice."
-                  : " Yak will move accounts automatically once billing is live."}
+                {canCheckout && isCheckoutPlan(suggested)
+                  ? " You can switch to it below."
+                  : hasSubscription
+                    ? " You can switch to it in Manage billing."
+                    : ""}
               </p>
             ) : null}
           </CardContent>
@@ -187,12 +361,17 @@ export function BillingPage() {
 
       <div className="px-4 lg:px-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Tiers</CardTitle>
-            <CardDescription>
-              Every tier has every module. They differ by how many active users
-              they cover and how much history Yak keeps.
-            </CardDescription>
+          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <CardTitle>Tiers</CardTitle>
+              <CardDescription>
+                Every tier has every module. They differ by how many active
+                users they cover and how much history Yak keeps.
+              </CardDescription>
+            </div>
+            {canCheckout ? (
+              <IntervalToggle value={interval} onChange={setBillingInterval} />
+            ) : null}
           </CardHeader>
           <CardContent>
             <div className="overflow-hidden rounded-xl border">
@@ -206,6 +385,7 @@ export function BillingPage() {
                     <TableHead>Admin seats</TableHead>
                     <TableHead>Data history</TableHead>
                     <TableHead>Support</TableHead>
+                    {canCheckout ? <TableHead /> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -216,6 +396,22 @@ export function BillingPage() {
                       previous={plans[index - 1]}
                       current={tier.id === plan.id}
                       suggested={Boolean(suggestsChange) && tier.id === suggested?.id}
+                      action={
+                        canCheckout ? (
+                          isCheckoutPlan(tier) && tier.id !== plan.id ? (
+                            <Button
+                              size="sm"
+                              variant={
+                                tier.id === suggested?.id ? "default" : "outline"
+                              }
+                              disabled={redirecting !== null}
+                              onClick={() => startCheckout(tier.id, interval)}
+                            >
+                              {redirecting === tier.id ? "Opening…" : "Choose"}
+                            </Button>
+                          ) : null
+                        ) : undefined
+                      }
                     />
                   ))}
                 </TableBody>
@@ -233,18 +429,16 @@ function TierRow({
   previous,
   current,
   suggested,
+  action,
 }: {
   tier: BillingPlan
   previous: BillingPlan | undefined
   current: boolean
   suggested: boolean
+  /** Undefined when the table has no action column at all. */
+  action?: React.ReactNode
 }) {
-  const range =
-    tier.mauCap === null
-      ? `${formatNumber((previous?.mauCap ?? 0) + 1)}+`
-      : previous?.mauCap
-        ? `${formatNumber(previous.mauCap + 1)} to ${formatNumber(tier.mauCap)}`
-        : `Up to ${formatNumber(tier.mauCap)}`
+  const range = mauRange(tier, previous)
 
   return (
     <TableRow className={cn(current && "bg-muted/40")}>
@@ -271,6 +465,9 @@ function TierRow({
       </TableCell>
       <TableCell>{formatHistory(tier.historyDays)}</TableCell>
       <TableCell>{tier.support === "email" ? "Email" : "Docs only"}</TableCell>
+      {action !== undefined ? (
+        <TableCell className="text-right">{action}</TableCell>
+      ) : null}
     </TableRow>
   )
 }
@@ -299,29 +496,4 @@ function Meter({ label, value }: { label: string; value: number }) {
       </p>
     </div>
   )
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat().format(value)
-}
-
-function formatPrice(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value)
-}
-
-function formatHistory(days: number | null) {
-  if (days === null) {
-    return "Custom"
-  }
-
-  if (days < 365) {
-    return `${days} days`
-  }
-
-  const months = Math.round(days / 30.4)
-  return months % 12 === 0 ? `${months / 12} year${months === 12 ? "" : "s"}` : `${months} months`
 }

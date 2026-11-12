@@ -49,9 +49,12 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   adminApi,
   formatAdminDate,
+  formatAgo,
+  formatCount,
   PLAN_TIERS,
   planLabel,
   type AdminTenant,
+  type AdminUsage,
   type AdminUser,
 } from "@/lib/admin"
 import { ApiError, type PlanTierId } from "@/lib/api"
@@ -213,6 +216,10 @@ export function AccountDetailPage() {
   }
 
   const suspended = tenant.status === "suspended"
+  // Mirrors the server, which refuses a hand-set plan while Stripe bills.
+  const paysThroughStripe = ["active", "trialing", "past_due"].includes(
+    tenant.subscriptionStatus ?? ""
+  )
 
   return (
     <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
@@ -260,12 +267,12 @@ export function AccountDetailPage() {
               </div>
             </div>
 
-            {/* Set by hand until Stripe drives it from the subscription. */}
+            {/* Stripe drives the tier while a subscription is live. */}
             <div className="max-w-md space-y-2">
               <Label htmlFor="tenant-plan">Plan</Label>
               <Select
                 value={tenant.plan}
-                disabled={busy}
+                disabled={busy || paysThroughStripe}
                 onValueChange={(value) =>
                   void run(
                     () => adminApi.setPlan(tenant.id, value as PlanTierId),
@@ -285,9 +292,11 @@ export function AccountDetailPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Sets the tier the account is on. Billing by monthly active
-                users is not connected yet, so this is the only place it
-                changes.
+                {paysThroughStripe
+                  ? `Paid through Stripe (${tenant.subscriptionStatus}). The owner changes the plan from Billing.`
+                  : tenant.pendingPlan
+                    ? `Picked ${planLabel(tenant.pendingPlan)} at sign up but has not paid yet. Setting a plan here replaces that choice.`
+                    : "Sets the tier by hand, for Scale contracts and accounts that pay outside Stripe."}
               </p>
             </div>
 
@@ -346,12 +355,14 @@ export function AccountDetailPage() {
           </CardContent>
         </Card>
 
+        <UsageCard tenant={tenant} />
+
         <Card>
           <CardHeader>
             <CardTitle>Apps</CardTitle>
             <CardDescription>
-              What the account has connected. Owners add and manage apps from
-              their panel; what those apps send is never visible here.
+              What the account has connected and how much each app sends.
+              Counts only; what those apps send is never visible here.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -360,19 +371,56 @@ export function AccountDetailPage() {
                 No apps yet.
               </p>
             ) : (
-              <ul className="divide-y rounded-xl border">
-                {tenant.apps.map((app) => (
-                  <li
-                    key={app.id}
-                    className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
-                  >
-                    <span className="font-medium">{app.name}</span>
-                    <Badge variant="outline">
-                      {app.status === "archived" ? "Archived" : "Active"}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>App</TableHead>
+                      <TableHead className="text-right">End users</TableHead>
+                      <TableHead className="text-right">
+                        Events this month
+                      </TableHead>
+                      <TableHead className="text-right">Open reports</TableHead>
+                      <TableHead className="text-right">API keys</TableHead>
+                      <TableHead>Last event</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tenant.apps.map((app) => (
+                      <TableRow key={app.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{app.name}</span>
+                            {app.status === "archived" ? (
+                              <Badge variant="outline">Archived</Badge>
+                            ) : null}
+                            {app.usage.integrations.map((name) => (
+                              <Badge key={name} variant="secondary">
+                                {integrationLabel(name)}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatCount(app.usage.syncedUsers)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatCount(app.usage.eventsThisMonth)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatCount(app.usage.reportsOpen)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatCount(app.usage.activeApiKeys)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatAgo(app.usage.lastEventAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -571,5 +619,83 @@ export function AccountDetailPage() {
         details={credentials}
       />
     </div>
+  )
+}
+
+function integrationLabel(name: string) {
+  return name === "revenuecat" ? "RevenueCat" : name
+}
+
+/**
+ * The account's usage at a glance, added up across its apps. Aggregates
+ * only: nothing here identifies an end user or shows what they sent.
+ */
+function UsageCard({ tenant }: { tenant: AdminTenant }) {
+  const usage: AdminUsage = tenant.usage
+
+  const stats: { label: string; value: string; hint?: string }[] = [
+    {
+      label: "Synced end users",
+      value: formatCount(usage.syncedUsers),
+    },
+    {
+      label: "Active users this month",
+      value: formatCount(usage.activeUsersThisMonth),
+      hint: "Added up per app",
+    },
+    {
+      label: "Events this month",
+      value: formatCount(usage.eventsThisMonth),
+    },
+    {
+      label: "Events all time",
+      value: formatCount(usage.eventsTotal),
+    },
+    {
+      label: "Reports this month",
+      value: formatCount(usage.reportsThisMonth),
+      hint: `${formatCount(usage.reportsOpen)} open, ${formatCount(usage.reportsTotal)} all time`,
+    },
+    {
+      label: "Active API keys",
+      value: formatCount(usage.activeApiKeys),
+      hint: `Last used ${formatAgo(usage.apiKeyLastUsedAt).toLowerCase()}`,
+    },
+    {
+      label: "Last event",
+      value: formatAgo(usage.lastEventAt),
+    },
+    {
+      label: "Last team sign in",
+      value: formatAgo(tenant.lastActiveAt),
+      hint: `${formatCount(tenant.userCount)} on the team`,
+    },
+  ]
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Usage</CardTitle>
+        <CardDescription>
+          How much the account uses Yak, across every app. Counts only: no end
+          user, event, or report is ever shown to staff.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {stats.map((stat) => (
+            <div key={stat.label} className="rounded-lg border p-3">
+              <dt className="text-xs text-muted-foreground">{stat.label}</dt>
+              <dd className="text-xl font-semibold tabular-nums">
+                {stat.value}
+              </dd>
+              {stat.hint ? (
+                <dd className="text-xs text-muted-foreground">{stat.hint}</dd>
+              ) : null}
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
   )
 }
