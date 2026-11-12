@@ -2,6 +2,7 @@ import * as React from "react"
 import { ActivityIcon, MousePointerClickIcon, UsersIcon } from "lucide-react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
+import { useCurrentApp } from "@/components/apps-provider"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -59,6 +60,7 @@ const trendConfig = {
 const WINDOW_DAYS = 7
 
 export function AnalyticsPage() {
+  const { id: appId } = useCurrentApp()
   const [query, setQuery] = React.useState("")
   const [eventFilter, setEventFilter] = React.useState<string>("all")
   const [platformFilter, setPlatformFilter] = React.useState<
@@ -78,10 +80,10 @@ export function AnalyticsPage() {
     let cancelled = false
 
     Promise.all([
-      analyticsApi.summary(WINDOW_DAYS),
-      analyticsApi.trend(WINDOW_DAYS),
-      analyticsApi.topEvents(WINDOW_DAYS),
-      analyticsApi.names(),
+      analyticsApi.summary(appId, WINDOW_DAYS),
+      analyticsApi.trend(appId, WINDOW_DAYS),
+      analyticsApi.topEvents(appId, WINDOW_DAYS),
+      analyticsApi.names(appId),
     ])
       .then(([nextSummary, nextTrend, nextStats, names]) => {
         if (!cancelled) {
@@ -106,7 +108,7 @@ export function AnalyticsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [appId])
 
   const trimmedQuery = query.trim()
 
@@ -117,7 +119,7 @@ export function AnalyticsPage() {
     const timer = setTimeout(
       () => {
         analyticsApi
-          .events({
+          .events(appId, {
             limit: 50,
             name: eventFilter === "all" ? undefined : eventFilter,
             platform: platformFilter === "all" ? undefined : platformFilter,
@@ -137,7 +139,7 @@ export function AnalyticsPage() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [eventFilter, platformFilter, trimmedQuery])
+  }, [appId, eventFilter, platformFilter, trimmedQuery])
 
   const filteredStats = stats.filter((item) => {
     if (eventFilter !== "all" && item.name !== eventFilter) {

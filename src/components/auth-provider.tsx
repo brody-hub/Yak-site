@@ -1,7 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 
-import { ApiError, authApi, meApi, type CurrentUser } from "@/lib/api"
+import {
+  ACCOUNT_SUSPENDED_EVENT,
+  ApiError,
+  authApi,
+  meApi,
+  type CurrentUser,
+} from "@/lib/api"
 import type { PanelPermissionId } from "@/lib/panel-permissions"
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated"
@@ -21,6 +27,10 @@ type AuthContextValue = {
   setUser: (user: CurrentUser) => void
   can: (permission: PanelPermissionId) => boolean
   canManageUsers: boolean
+  /** Yak staff: the admin console instead of a customer panel. */
+  isSuperAdmin: boolean
+  /** The user's workspace has been suspended by a super admin. */
+  tenantSuspended: boolean
 }
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
@@ -56,6 +66,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     void load()
+  }, [load])
+
+  // A suspension mid-session turns every panel request into a 403. Re-reading
+  // /me picks up the suspended status so the guard can show why.
+  React.useEffect(() => {
+    const onSuspended = () => void load()
+    window.addEventListener(ACCOUNT_SUSPENDED_EVENT, onSuspended)
+    return () =>
+      window.removeEventListener(ACCOUNT_SUSPENDED_EVENT, onSuspended)
   }, [load])
 
   const signIn = React.useCallback(
@@ -98,6 +117,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser: setUserState,
       can,
       canManageUsers: user?.role === "owner" || user?.role === "admin",
+      isSuperAdmin: user?.isSuperAdmin ?? false,
+      tenantSuspended: user?.tenant?.status === "suspended",
     }),
     [status, user, signIn, signOut, changePassword, load, can]
   )

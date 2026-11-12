@@ -3,6 +3,7 @@ import * as React from "react"
 import { toast } from "sonner"
 
 import { useAuth } from "@/components/auth-provider"
+import { useApps } from "@/components/apps-provider"
 import { useIntegrations } from "@/components/integrations-provider"
 import { ApiError, dashboardApi } from "@/lib/api"
 import {
@@ -92,6 +93,10 @@ function normalizeWidgets(widgets: DashboardWidget[]): DashboardWidget[] {
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const { can } = useAuth()
   const { status: integrationsStatus, connected } = useIntegrations()
+  // App-scoped tiles follow the sidebar's app switcher; the layout itself is
+  // per user and shared across apps.
+  const { currentApp } = useApps()
+  const appId = currentApp?.id ?? null
 
   const [status, setStatus] = React.useState<DashboardState["status"]>("loading")
   const [error, setError] = React.useState<string | null>(null)
@@ -313,7 +318,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     })
 
     for (const key of keys) {
-      void fetchSource(key).then((state) => {
+      void fetchSource(key, appId).then((state) => {
         if (!cancelled) {
           setSources((current) => ({ ...current, [key]: state }))
         }
@@ -323,7 +328,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [sourceSignature, status, dataNonce])
+  }, [sourceSignature, status, dataNonce, appId])
 
   const refreshData = React.useCallback(() => {
     setDataNonce((current) => current + 1)

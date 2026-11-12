@@ -7,6 +7,7 @@ import {
   ApiKeySecretDialog,
   type ApiKeySecretDetails,
 } from "@/components/api-key-secret-dialog"
+import { useCurrentApp } from "@/components/apps-provider"
 import { IntegrationCard } from "@/components/integration-card"
 import { useIntegrations } from "@/components/integrations-provider"
 import { SideshiftIntegrationCard } from "@/components/sideshift-integration-card"
@@ -50,6 +51,8 @@ import { formatDateTime } from "@/lib/kpis"
 type ScopeOption = { id: string; description: string }
 
 export function IntegrationsPage() {
+  const currentApp = useCurrentApp()
+  const appId = currentApp.id
   const { get: getIntegration, refresh: refreshIntegrations } =
     useIntegrations()
   const [keys, setKeys] = React.useState<ApiKeySummary[]>([])
@@ -69,8 +72,8 @@ export function IntegrationsPage() {
 
     try {
       const [nextKeys, nextScopes] = await Promise.all([
-        apiKeysApi.list(),
-        apiKeysApi.scopes(),
+        apiKeysApi.list(appId),
+        apiKeysApi.scopes(appId),
       ])
       setKeys(nextKeys)
       setScopes(nextScopes)
@@ -81,7 +84,7 @@ export function IntegrationsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [appId])
 
   React.useEffect(() => {
     void load()
@@ -111,17 +114,18 @@ export function IntegrationsPage() {
     setBusyId(key.id)
 
     try {
-      const { key: created, secret } = await apiKeysApi.create({
+      const { key: created, secret } = await apiKeysApi.create(appId, {
         name: key.name,
         scopes: key.scopes,
       })
-      await apiKeysApi.revoke(key.id)
-      await load()
+      // Shown before anything else can fail: the secret exists only here.
       showSecret({
         name: created.name,
         secret,
         mode: "rotated",
       })
+      await apiKeysApi.revoke(appId, key.id)
+      await load()
       toast.success("API key rotated")
     } catch (err) {
       toast.error(
@@ -144,7 +148,7 @@ export function IntegrationsPage() {
     setBusyId(key.id)
 
     try {
-      await apiKeysApi.revoke(key.id)
+      await apiKeysApi.revoke(appId, key.id)
       await load()
       toast.success("API key revoked")
     } catch (err) {
@@ -161,8 +165,10 @@ export function IntegrationsPage() {
       <div className="space-y-1 px-4 lg:px-6">
         <h1 className="text-lg font-semibold tracking-tight">Integrations</h1>
         <p className="text-muted-foreground text-sm">
-          Connect the services Stand reads metrics from, and mint the keys your
-          app uses to send data in.
+          Connect the services Stand reads metrics from, and mint the keys{" "}
+          <span className="font-medium text-foreground">{currentApp.name}</span>{" "}
+          uses to send data in. Switch apps from the sidebar to manage another
+          app&apos;s keys.
         </p>
       </div>
 
@@ -326,7 +332,13 @@ export function IntegrationsPage() {
 
       <ApiKeySecretDialog
         open={secretOpen}
-        onOpenChange={setSecretOpen}
+        onOpenChange={(open) => {
+          setSecretOpen(open)
+          if (!open) {
+            // The secret does not linger in memory once dismissed.
+            setSecretDetails(null)
+          }
+        }}
         details={secretDetails}
       />
     </div>
@@ -344,6 +356,7 @@ function CreateApiKeyDialog({
   scopes: ScopeOption[]
   onCreated: (key: ApiKeySummary, secret: string) => void
 }) {
+  const { id: appId } = useCurrentApp()
   const [name, setName] = React.useState("")
   const [selectedScopes, setSelectedScopes] = React.useState<string[]>([])
   const [saving, setSaving] = React.useState(false)
@@ -387,7 +400,7 @@ function CreateApiKeyDialog({
     setSaving(true)
 
     try {
-      const { key, secret } = await apiKeysApi.create({
+      const { key, secret } = await apiKeysApi.create(appId, {
         name: trimmed,
         scopes: selectedScopes,
       })

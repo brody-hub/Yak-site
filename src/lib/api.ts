@@ -1,7 +1,4 @@
-import type {
-  ActivityAction,
-  PanelPermissionId,
-} from "@/lib/panel-permissions"
+import type { ActivityAction, PanelPermissionId } from "@/lib/panel-permissions"
 import type {
   ReportPriority,
   ReportStatus,
@@ -16,7 +13,11 @@ import type {
   TicketPriority,
   TicketStatus,
 } from "@/lib/tasks"
-import type { AnalyticsEvent, DailyEventPoint, EventNameStat } from "@/lib/analytics"
+import type {
+  AnalyticsEvent,
+  DailyEventPoint,
+  EventNameStat,
+} from "@/lib/analytics"
 import type { AppUser } from "@/lib/app-users"
 import type { DashboardWidget } from "@/lib/dashboard"
 import type { DiscordTriggerId } from "@/lib/discord-webhooks"
@@ -88,6 +89,16 @@ function buildUrl(path: string, query?: RequestOptions["query"]) {
   return url.toString()
 }
 
+/** The server's 403 message for every request from a suspended tenant. */
+const ACCOUNT_SUSPENDED_MESSAGE = "This account has been suspended"
+
+/**
+ * Fired on `window` when a request is refused because the tenant was suspended
+ * mid-session, so the auth provider can re-read /me and show the suspended
+ * screen instead of a panel full of errors.
+ */
+export const ACCOUNT_SUSPENDED_EVENT = "yak:account-suspended"
+
 /**
  * Single entry point for every call to the backend.
  *
@@ -104,9 +115,13 @@ export async function request<T>(
     response = await fetch(buildUrl(path, options.query), {
       method: options.method ?? "GET",
       credentials: "include",
-      headers: options.body
-        ? { "Content-Type": "application/json" }
-        : undefined,
+      // Always a JSON content type on writes, body or not, so every write is
+      // a CORS preflighted request rather than a "simple" one a third-party
+      // page could fire with the session cookie attached.
+      headers:
+        options.body || (options.method && options.method !== "GET")
+          ? { "Content-Type": "application/json" }
+          : undefined,
       body: options.body ? JSON.stringify(options.body) : undefined,
       ...(options.signal ? { signal: options.signal } : {}),
     })
@@ -137,6 +152,13 @@ export async function request<T>(
         ? payload.error
         : { code: "unknown_error", message: response.statusText }
 
+    if (
+      response.status === 403 &&
+      error.message === ACCOUNT_SUSPENDED_MESSAGE
+    ) {
+      window.dispatchEvent(new Event(ACCOUNT_SUSPENDED_EVENT))
+    }
+
     throw new ApiError(
       response.status,
       error.code,
@@ -162,8 +184,9 @@ async function get<T>(path: string, query?: RequestOptions["query"]) {
  * the plain `{ data }` envelope, so callers get both without a cast.
  */
 async function getPage<T>(path: string, query?: RequestOptions["query"]) {
-  const response = (await request<T[]>(path, { query })) as unknown as
-    Paginated<T>
+  const response = (await request<T[]>(path, {
+    query,
+  })) as unknown as Paginated<T>
 
   return response
 }
@@ -172,7 +195,11 @@ async function getPage<T>(path: string, query?: RequestOptions["query"]) {
 /* Shared server types                                                         */
 /* -------------------------------------------------------------------------- */
 
+/** Roles inside a customer's workspace. */
 export type UserRole = "owner" | "admin" | "member"
+
+/** Yak staff hold `super_admin`, which belongs to no customer workspace. */
+export type AccountRole = UserRole | "super_admin"
 
 export type ServerSystemUser = {
   id: string
@@ -188,7 +215,20 @@ export type ServerSystemUser = {
   createdAt: string
 }
 
-export type CurrentUser = ServerSystemUser & { mustChangePassword: boolean }
+export type CurrentTenant = {
+  id: string
+  name: string
+  slug: string
+  status: "active" | "suspended"
+}
+
+export type CurrentUser = Omit<ServerSystemUser, "role"> & {
+  role: AccountRole
+  mustChangePassword: boolean
+  isSuperAdmin: boolean
+  /** The customer workspace the user belongs to. Null for super admins. */
+  tenant: CurrentTenant | null
+}
 
 export type ServerActivityEntry = {
   id: string
@@ -212,12 +252,110 @@ export type Paginated<T> = {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Apps                                                                        */
+/* -------------------------------------------------------------------------- */
+
+export type AppStatus = "active" | "archived"
+
+/**
+ * One of the workspace's apps. Everything an app sends (events, users,
+ * reports) and the credentials it sends with belong to exactly one app, so the
+ * endpoints for those live under `/api/apps/:appId`.
+ */
+export type App = {
+  id: string
+  name: string
+  slug: string
+  status: AppStatus
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type AppDetail = App & {
+  userCount: number
+  apiKeyCount: number
+}
+
+/** Prefix for every endpoint scoped to one app. */
+function appPath(appId: string, path: string) {
+  return `/api/apps/${encodeURIComponent(appId)}${path}`
+}
+
+export const appsApi = {
+  list: () => get<App[]>("/api/apps"),
+  get: (id: string) => get<AppDetail>(appPath(id, "")),
+
+  create: async (input: { name: string; slug?: string }) =>
+    (await request<App>("/api/apps", { method: "POST", body: input })).data,
+
+  rename: async (id: string, name: string) =>
+    (
+      await request<App>(appPath(id, ""), {
+        method: "PATCH",
+        body: { name },
+      })
+    ).data,
+
+  archive: async (id: string) =>
+    (await request<App>(appPath(id, "/archive"), { method: "POST" })).data,
+
+  restore: async (id: string) =>
+    (await request<App>(appPath(id, "/restore"), { method: "POST" })).data,
+}
+
+/* -------------------------------------------------------------------------- */
+/* Billing                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export type PlanTierId =
+  | "free"
+  | "starter"
+  | "growth"
+  | "pro"
+  | "studio"
+  | "scale"
+
+export type BillingPlan = {
+  id: PlanTierId
+  name: string
+  /** Inclusive MAU cap; null for the custom tier. */
+  mauCap: number | null
+  monthlyPrice: number | null
+  annualPrice: number | null
+  /** Null means unlimited. */
+  adminSeats: number | null
+  historyDays: number | null
+  eventsPerMonth: number | null
+  support: "docs" | "email"
+}
+
+export type BillingSummary = {
+  plan: BillingPlan
+  plans: BillingPlan[]
+  usage: {
+    currentMonthMau: number
+    previousMonthMau: number
+    /** Peak of the last two full months, which is what sets the tier. */
+    billableMau: number
+    suggestedPlanId: PlanTierId
+  }
+  hasPaymentMethod: boolean
+  /** False until Stripe is connected on the server. */
+  paymentsEnabled: boolean
+}
+
+export const billingApi = {
+  get: () => get<BillingSummary>("/api/billing"),
+}
+
+/* -------------------------------------------------------------------------- */
 /* Public config                                                               */
 /* -------------------------------------------------------------------------- */
 
 export type AppConfig = {
   tenantName: string
-  tenantSlug: string
+  tenantSlug: string | null
   signUpEnabled: boolean
   passwordMinLength: number
   branding: {
@@ -231,8 +369,9 @@ export type AppConfig = {
 let configPromise: Promise<AppConfig> | null = null
 
 /**
- * Branding and tenant metadata, readable without a session so the login screen
- * can render it. Memoized because several providers need it during boot.
+ * Product branding, readable without a session so the login screen can render
+ * it. A tenant's own brand comes from brandingApi once signed in. Memoized
+ * because several providers need it during boot.
  */
 export function fetchAppConfig(): Promise<AppConfig> {
   configPromise ??= get<AppConfig>("/api/config").catch((error: unknown) => {
@@ -285,7 +424,10 @@ export const authApi = {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, redirectTo: `${window.location.origin}/reset-password` }),
+      body: JSON.stringify({
+        email,
+        redirectTo: `${window.location.origin}/reset-password`,
+      }),
     })
   },
 
@@ -441,8 +583,12 @@ export const tasksApi = {
     durationWeeks: SprintDurationWeeks
     startDate: string
   }) =>
-    (await request<Sprint>("/api/tasks/sprints", { method: "POST", body: input }))
-      .data,
+    (
+      await request<Sprint>("/api/tasks/sprints", {
+        method: "POST",
+        body: input,
+      })
+    ).data,
 
   deleteSprint: (id: string) =>
     request<{ ok: true }>(`/api/tasks/sprints/${id}`, { method: "DELETE" }),
@@ -499,19 +645,24 @@ export type ReportCounts = {
   report: number
 }
 
+/** Reports are filed against one app, so every call names it. */
 export const reportsApi = {
-  counts: () => get<ReportCounts>("/api/reports/counts"),
+  counts: (appId: string) =>
+    get<ReportCounts>(appPath(appId, "/reports/counts")),
 
-  list: (params?: {
-    type?: ReportType
-    status?: ReportStatus
-    search?: string
-    /** Excludes resolved and closed reports, matching the inbox default. */
-    openOnly?: boolean
-    limit?: number
-    offset?: number
-  }) =>
-    getPage<SupportReport>("/api/reports", {
+  list: (
+    appId: string,
+    params?: {
+      type?: ReportType
+      status?: ReportStatus
+      search?: string
+      /** Excludes resolved and closed reports, matching the inbox default. */
+      openOnly?: boolean
+      limit?: number
+      offset?: number
+    }
+  ) =>
+    getPage<SupportReport>(appPath(appId, "/reports"), {
       type: params?.type,
       status: params?.status,
       search: params?.search,
@@ -520,9 +671,11 @@ export const reportsApi = {
       offset: params?.offset ?? 0,
     }),
 
-  get: (id: string) => get<SupportReport>(`/api/reports/${id}`),
+  get: (appId: string, id: string) =>
+    get<SupportReport>(appPath(appId, `/reports/${id}`)),
 
   update: async (
+    appId: string,
     id: string,
     patch: {
       status?: ReportStatus
@@ -531,18 +684,19 @@ export const reportsApi = {
     }
   ) =>
     (
-      await request<SupportReport>(`/api/reports/${id}`, {
+      await request<SupportReport>(appPath(appId, `/reports/${id}`), {
         method: "PATCH",
         body: patch,
       })
     ).data,
 
   reply: async (
+    appId: string,
     id: string,
     input: { body: string; isInternal?: boolean; status?: ReportStatus }
   ) =>
     (
-      await request<SupportReport>(`/api/reports/${id}/messages`, {
+      await request<SupportReport>(appPath(appId, `/reports/${id}/messages`), {
         method: "POST",
         body: input,
       })
@@ -563,18 +717,26 @@ export type AnalyticsSummary = {
 }
 
 export const analyticsApi = {
-  summary: (days = 7) => get<AnalyticsSummary>("/api/analytics/summary", { days }),
-  trend: (days = 7) => get<DailyEventPoint[]>("/api/analytics/trend", { days }),
-  topEvents: (days = 7, limit = 10) =>
-    get<EventNameStat[]>("/api/analytics/top-events", { days, limit }),
-  names: () => get<string[]>("/api/analytics/names"),
-  events: (params?: {
-    limit?: number
-    name?: string
-    search?: string
-    platform?: AnalyticsEvent["platform"]
-  }) =>
-    get<AnalyticsEvent[]>("/api/analytics/events", {
+  summary: (appId: string, days = 7) =>
+    get<AnalyticsSummary>(appPath(appId, "/analytics/summary"), { days }),
+  trend: (appId: string, days = 7) =>
+    get<DailyEventPoint[]>(appPath(appId, "/analytics/trend"), { days }),
+  topEvents: (appId: string, days = 7, limit = 10) =>
+    get<EventNameStat[]>(appPath(appId, "/analytics/top-events"), {
+      days,
+      limit,
+    }),
+  names: (appId: string) => get<string[]>(appPath(appId, "/analytics/names")),
+  events: (
+    appId: string,
+    params?: {
+      limit?: number
+      name?: string
+      search?: string
+      platform?: AnalyticsEvent["platform"]
+    }
+  ) =>
+    get<AnalyticsEvent[]>(appPath(appId, "/analytics/events"), {
       limit: params?.limit ?? 50,
       name: params?.name,
       search: params?.search,
@@ -603,8 +765,8 @@ export const appUsersApi = {
    * An empty query returns the most recently added users. `total` is the size
    * of the whole roster, however many rows came back.
    */
-  async list(query: string, signal?: AbortSignal) {
-    const response = await request<AppUser[]>("/api/app-users", {
+  async list(appId: string, query: string, signal?: AbortSignal) {
+    const response = await request<AppUser[]>(appPath(appId, "/app-users"), {
       query: { q: query },
       signal,
     })
@@ -615,10 +777,11 @@ export const appUsersApi = {
       total: typeof total === "number" ? total : null,
     }
   },
-  stats: (days = 7) => get<AppUserStats>("/api/app-users/stats", { days }),
-  detail: (externalId: string) =>
+  stats: (appId: string, days = 7) =>
+    get<AppUserStats>(appPath(appId, "/app-users/stats"), { days }),
+  detail: (appId: string, externalId: string) =>
     get<{ user: AppUser; reports: SupportReport[] }>(
-      `/api/app-users/${encodeURIComponent(externalId)}`
+      appPath(appId, `/app-users/${encodeURIComponent(externalId)}`)
     ),
 }
 
@@ -640,32 +803,42 @@ export type ServerIntegration = {
   lastError: string | null
 }
 
+/**
+ * RevenueCat is connected per app, so the list is read for one app. Sideshift
+ * belongs to the whole workspace but is reported in the same list for the
+ * dashboard's convenience.
+ */
 export const integrationsApi = {
-  list: () => get<ServerIntegration[]>("/api/integrations"),
+  list: (appId: string) =>
+    get<ServerIntegration[]>(appPath(appId, "/integrations")),
 
   /** The key is write-only: no endpoint ever returns it after this call. */
-  connectRevenueCat: async (input: { apiKey: string; projectId?: string }) =>
+  connectRevenueCat: async (
+    appId: string,
+    input: { apiKey: string; projectId?: string }
+  ) =>
     (
-      await request<ServerIntegration>("/api/integrations/revenuecat", {
-        method: "PUT",
-        body: input,
-      })
+      await request<ServerIntegration>(
+        appPath(appId, "/integrations/revenuecat"),
+        { method: "PUT", body: input }
+      )
     ).data,
 
-  testRevenueCat: async () =>
+  testRevenueCat: async (appId: string) =>
     (
       await request<{
         ok: true
         metricsAvailable: number
         currency: string
-      }>("/api/integrations/revenuecat/test", { method: "POST" })
+      }>(appPath(appId, "/integrations/revenuecat/test"), { method: "POST" })
     ).data,
 
-  disconnectRevenueCat: async () =>
+  disconnectRevenueCat: async (appId: string) =>
     (
-      await request<ServerIntegration>("/api/integrations/revenuecat", {
-        method: "DELETE",
-      })
+      await request<ServerIntegration>(
+        appPath(appId, "/integrations/revenuecat"),
+        { method: "DELETE" }
+      )
     ).data,
 }
 
@@ -710,6 +883,18 @@ export const sideshiftApi = {
       })
     ).data,
 
+  /**
+   * Finishes a connection after Sideshift redirects back. Only works for the
+   * signed-in user who clicked Connect. Resolves to a callback outcome key.
+   */
+  complete: async (state: string) =>
+    (
+      await request<{ outcome: string }>("/api/sideshift/complete", {
+        method: "POST",
+        body: { state },
+      })
+    ).data.outcome,
+
   disconnect: async () =>
     (
       await request<SideshiftStatus>("/api/sideshift/connection", {
@@ -723,10 +908,12 @@ export const sideshiftApi = {
 /* -------------------------------------------------------------------------- */
 
 export const kpisApi = {
-  overview: () => get<KpiOverview>("/api/kpis/overview"),
-  trend: (chart: KpiChartName, days = 30) =>
-    get<KpiTrend>("/api/kpis/trend", { chart, days }),
-  charts: () => get<{ id: KpiChartName; label: string }[]>("/api/kpis/charts"),
+  overview: (appId: string) =>
+    get<KpiOverview>(appPath(appId, "/kpis/overview")),
+  trend: (appId: string, chart: KpiChartName, days = 30) =>
+    get<KpiTrend>(appPath(appId, "/kpis/trend"), { chart, days }),
+  charts: (appId: string) =>
+    get<{ id: KpiChartName; label: string }[]>(appPath(appId, "/kpis/charts")),
 }
 
 /* -------------------------------------------------------------------------- */
@@ -761,6 +948,11 @@ export type ThemeSettings = {
   primaryColor: string
   defaultTheme: string
   updatedAt: string
+}
+
+/** The signed-in tenant's brand. Readable by every tenant user. */
+export const brandingApi = {
+  get: () => get<ThemeSettings>("/api/branding"),
 }
 
 export const settingsApi = {
@@ -832,12 +1024,16 @@ export type ApiKeySummary = {
   createdAt: string
 }
 
+/** A key sends data for exactly one app, so keys are minted per app. */
 export const apiKeysApi = {
-  list: () => get<ApiKeySummary[]>("/api/api-keys"),
-  scopes: () => get<{ id: string; description: string }[]>("/api/api-keys/scopes"),
+  list: (appId: string) => get<ApiKeySummary[]>(appPath(appId, "/api-keys")),
+  scopes: (appId: string) =>
+    get<{ id: string; description: string }[]>(
+      appPath(appId, "/api-keys/scopes")
+    ),
 
-  async create(input: { name: string; scopes: string[] }) {
-    const response = await request<ApiKeySummary>("/api/api-keys", {
+  async create(appId: string, input: { name: string; scopes: string[] }) {
+    const response = await request<ApiKeySummary>(appPath(appId, "/api-keys"), {
       method: "POST",
       body: input,
     })
@@ -849,10 +1045,14 @@ export const apiKeysApi = {
     }
   },
 
-  revoke: (id: string) =>
-    request<ApiKeySummary>(`/api/api-keys/${id}/revoke`, { method: "POST" }),
-  remove: (id: string) =>
-    request<{ ok: true }>(`/api/api-keys/${id}`, { method: "DELETE" }),
+  revoke: (appId: string, id: string) =>
+    request<ApiKeySummary>(appPath(appId, `/api-keys/${id}/revoke`), {
+      method: "POST",
+    }),
+  remove: (appId: string, id: string) =>
+    request<{ ok: true }>(appPath(appId, `/api-keys/${id}`), {
+      method: "DELETE",
+    }),
 }
 
 /* -------------------------------------------------------------------------- */
@@ -883,7 +1083,8 @@ export const uploadsApi = {
         headers: Record<string, string>
       }>("/api/uploads/direct-upload", {
         method: "POST",
-        body: { purpose, contentType },
+        // The size is signed into the URL, so only this file fits it.
+        body: { purpose, contentType, sizeBytes: file.size },
       })
     ).data
 

@@ -34,33 +34,71 @@ export type SourceState =
 
 export type SourceStates = Record<SourceKey, SourceState>
 
-async function loadSource(key: SourceKey): Promise<unknown> {
-  const [name, ...args] = key.split(":")
+/** Sources that read one app's data, as opposed to the whole workspace's. */
+const APP_SCOPED_SOURCES = new Set([
+  "kpi.overview",
+  "kpi.trend",
+  "analytics.summary",
+  "analytics.trend",
+  "analytics.topEvents",
+  "analytics.events",
+  "reports.counts",
+  "reports.recent",
+  "appUsers.stats",
+])
+
+export class NoAppSelectedError extends Error {
+  constructor() {
+    super("Pick an app to show this data")
+    this.name = "NoAppSelectedError"
+  }
+}
+
+/**
+ * `appId` is the app the dashboard is looking at. Workspace-wide sources
+ * (tasks, Sideshift) ignore it; app-scoped ones fail without it.
+ */
+async function loadSource(
+  key: SourceKey,
+  appId: string | null
+): Promise<unknown> {
+  const [name = "", ...args] = key.split(":")
+
+  if (APP_SCOPED_SOURCES.has(name) && !appId) {
+    throw new NoAppSelectedError()
+  }
+
+  // Narrowed above for the keys that need it; the cast keeps the cases short.
+  const app = appId as string
 
   switch (name) {
     case "kpi.overview":
-      return kpisApi.overview()
+      return kpisApi.overview(app)
 
     case "kpi.trend":
-      return kpisApi.trend(args[0] as KpiChartName, Number(args[1] ?? 30))
+      return kpisApi.trend(app, args[0] as KpiChartName, Number(args[1] ?? 30))
 
     case "analytics.summary":
-      return analyticsApi.summary(Number(args[0] ?? 7))
+      return analyticsApi.summary(app, Number(args[0] ?? 7))
 
     case "analytics.trend":
-      return analyticsApi.trend(Number(args[0] ?? 30))
+      return analyticsApi.trend(app, Number(args[0] ?? 30))
 
     case "analytics.topEvents":
-      return analyticsApi.topEvents(Number(args[0] ?? 7), Number(args[1] ?? 8))
+      return analyticsApi.topEvents(
+        app,
+        Number(args[0] ?? 7),
+        Number(args[1] ?? 8)
+      )
 
     case "analytics.events":
-      return analyticsApi.events({ limit: Number(args[0] ?? 10) })
+      return analyticsApi.events(app, { limit: Number(args[0] ?? 10) })
 
     case "reports.counts":
-      return reportsApi.counts()
+      return reportsApi.counts(app)
 
     case "reports.recent": {
-      const page = await reportsApi.list({
+      const page = await reportsApi.list(app, {
         openOnly: true,
         limit: Number(args[0] ?? 6),
       })
@@ -72,7 +110,7 @@ async function loadSource(key: SourceKey): Promise<unknown> {
       return tasksApi.tickets()
 
     case "appUsers.stats":
-      return appUsersApi.stats(Number(args[0] ?? 7))
+      return appUsersApi.stats(app, Number(args[0] ?? 7))
 
     case "sideshift.week":
       return sideshiftApi.analytics({
@@ -95,10 +133,17 @@ async function loadSource(key: SourceKey): Promise<unknown> {
 }
 
 /** Fetches one source, normalising failures into a displayable message. */
-export async function fetchSource(key: SourceKey): Promise<SourceState> {
+export async function fetchSource(
+  key: SourceKey,
+  appId: string | null
+): Promise<SourceState> {
   try {
-    return { status: "ready", data: await loadSource(key) }
+    return { status: "ready", data: await loadSource(key, appId) }
   } catch (error) {
+    if (error instanceof NoAppSelectedError) {
+      return { status: "error", message: error.message }
+    }
+
     if (error instanceof ApiError && error.isForbidden) {
       // The user's access changed since the layout was saved. The tile says so
       // rather than disappearing, so they know why it stopped working.

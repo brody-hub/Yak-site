@@ -16,6 +16,8 @@ const titles: Record<string, string> = {
   "/settings/theme": "Theme",
   "/settings/discord": "Discord",
   "/settings/integrations": "Integrations",
+  "/settings/apps": "Apps",
+  "/settings/billing": "Billing",
   "/settings/documentation": "Documentation",
 }
 

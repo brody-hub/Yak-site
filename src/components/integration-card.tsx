@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { useCurrentApp } from "@/components/apps-provider"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError, integrationsApi, type ServerIntegration } from "@/lib/api"
@@ -39,6 +40,7 @@ export function IntegrationCard({
   integration: ServerIntegration | undefined
   onChange: () => void | Promise<void>
 }) {
+  const { id: appId } = useCurrentApp()
   const connected = integration?.connected ?? false
 
   const [apiKey, setApiKey] = React.useState("")
@@ -62,7 +64,9 @@ export function IntegrationCard({
     setBusy("connect")
 
     try {
-      const result = await integrationsApi.connectRevenueCat({ apiKey: trimmed })
+      const result = await integrationsApi.connectRevenueCat(appId, {
+        apiKey: trimmed,
+      })
       // Cleared immediately so the plaintext does not linger in a form field.
       setApiKey("")
       setReplacing(false)
@@ -87,7 +91,7 @@ export function IntegrationCard({
     setBusy("test")
 
     try {
-      const result = await integrationsApi.testRevenueCat()
+      const result = await integrationsApi.testRevenueCat(appId)
       await onChange()
       toast.success(
         `Connection is healthy · ${result.metricsAvailable} metrics in ${result.currency}`
@@ -114,7 +118,7 @@ export function IntegrationCard({
     setBusy("remove")
 
     try {
-      await integrationsApi.disconnectRevenueCat()
+      await integrationsApi.disconnectRevenueCat(appId)
       setReplacing(false)
       setApiKey("")
       await onChange()

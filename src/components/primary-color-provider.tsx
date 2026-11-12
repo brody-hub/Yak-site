@@ -7,7 +7,7 @@ import {
   isHexColor,
   normalizeHex,
 } from "@/lib/primary-colors"
-import { fetchAppConfig, settingsApi } from "@/lib/api"
+import { settingsApi } from "@/lib/api"
 
 type PrimaryColorProviderProps = {
   children: React.ReactNode
@@ -39,28 +39,8 @@ export function PrimaryColorProvider({
     return normalizeHex(defaultPrimaryColor) ?? DEFAULT_PRIMARY_HEX
   })
 
-  // The stored value is only a cache for instant paint; the server is the
-  // source of truth once it answers.
-  React.useEffect(() => {
-    let cancelled = false
-
-    fetchAppConfig()
-      .then((config) => {
-        const normalized = normalizeHex(config.branding.primaryColor)
-
-        if (!cancelled && normalized) {
-          localStorage.setItem(storageKey, normalized)
-          setPrimaryColorState(normalized)
-        }
-      })
-      .catch(() => {
-        // Keep whatever was cached locally.
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [storageKey])
+  // The stored value is only a cache for instant paint. The server's value
+  // arrives through BrandingSync once it knows whose brand to load.
 
   const setPrimaryColor = React.useCallback(
     (nextColor: string, options?: { persist?: boolean }) => {

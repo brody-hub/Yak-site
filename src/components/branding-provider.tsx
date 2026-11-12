@@ -1,11 +1,23 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 
-import { fetchAppConfig, settingsApi, uploadsApi } from "@/lib/api"
+import { brandingApi, fetchAppConfig, settingsApi, uploadsApi } from "@/lib/api"
 
 const NAME_STORAGE_KEY = "brand-name"
 const LOGO_STORAGE_KEY = "brand-logo"
-const DEFAULT_NAME = "Stand"
+const DEFAULT_NAME = "Yak"
+
+/**
+ * Whose brand to show. Signed-out visitors and super admins see the product's
+ * own brand; a tenant user sees their workspace's.
+ */
+export type BrandingSession = "public" | "tenant"
+
+type ServerBranding = {
+  brandName: string
+  logoUrl: string | null
+  primaryColor: string
+}
 const DEFAULT_FAVICON = "/vite.svg"
 
 type BrandingProviderProps = {
@@ -20,6 +32,11 @@ type BrandingProviderState = {
   setName: (name: string) => Promise<void>
   uploadLogo: (file: File) => Promise<void>
   removeLogo: () => Promise<void>
+  /**
+   * Loads the brand for the current session. Called by BrandingSync whenever
+   * the signed-in user changes. Resolves with the brand's primary colour.
+   */
+  loadFor: (session: BrandingSession) => Promise<string | null>
 }
 
 const BrandingContext = React.createContext<BrandingProviderState | undefined>(
@@ -50,7 +67,9 @@ function applyFavicon(href: string) {
 
 /**
  * Branding lives on the server, but the cached copy in localStorage is painted
- * first so the login screen is never briefly unbranded on a cold load.
+ * first so the login screen is never briefly unbranded on a cold load. Which
+ * brand to fetch depends on who is signed in, so loading is driven from inside
+ * the auth provider by BrandingSync.
  */
 export function BrandingProvider({ children }: BrandingProviderProps) {
   const [name, setNameState] = React.useState(
@@ -76,33 +95,37 @@ export function BrandingProvider({ children }: BrandingProviderProps) {
     []
   )
 
-  // Branding comes from the unauthenticated config endpoint so it is available
-  // on the login screen too.
-  React.useEffect(() => {
-    let cancelled = false
+  // Only the latest request may apply, so a slow config response cannot paint
+  // the product brand over a tenant brand that arrived first.
+  const loadSeq = React.useRef(0)
 
-    async function load() {
+  const loadFor = React.useCallback(
+    async (session: BrandingSession) => {
+      const seq = ++loadSeq.current
+
       try {
-        const config = await fetchAppConfig()
+        const branding: ServerBranding =
+          session === "tenant"
+            ? await brandingApi.get()
+            : (await fetchAppConfig()).branding
 
-        if (!cancelled) {
-          applyBranding(config.branding)
+        if (seq !== loadSeq.current) {
+          return null
         }
+
+        applyBranding(branding)
+        return branding.primaryColor
       } catch {
         // Offline or the API is down. The cached values stay in place.
+        return null
       } finally {
-        if (!cancelled) {
+        if (seq === loadSeq.current) {
           setLoading(false)
         }
       }
-    }
-
-    void load()
-
-    return () => {
-      cancelled = true
-    }
-  }, [applyBranding])
+    },
+    [applyBranding]
+  )
 
   const setName = React.useCallback(
     async (nextName: string) => {
@@ -142,8 +165,8 @@ export function BrandingProvider({ children }: BrandingProviderProps) {
   }, [logo])
 
   const value = React.useMemo(
-    () => ({ name, logo, loading, setName, uploadLogo, removeLogo }),
-    [name, logo, loading, setName, uploadLogo, removeLogo]
+    () => ({ name, logo, loading, setName, uploadLogo, removeLogo, loadFor }),
+    [name, logo, loading, setName, uploadLogo, removeLogo, loadFor]
   )
 
   return (

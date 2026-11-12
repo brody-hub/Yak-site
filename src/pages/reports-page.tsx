@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { useCurrentApp } from "@/components/apps-provider"
 import { useSystemUsers } from "@/components/system-users-provider"
 import { UserAvatar } from "@/components/user-avatar"
 import { Badge } from "@/components/ui/badge"
@@ -65,6 +66,7 @@ const priorityStyles: Record<ReportPriority, string> = {
 }
 
 export function ReportsPage() {
+  const { id: appId } = useCurrentApp()
   const { users } = useSystemUsers()
   const [reports, setReports] = React.useState<SupportReport[]>([])
   const [counts, setCounts] = React.useState<ReportCounts | null>(null)
@@ -88,7 +90,7 @@ export function ReportsPage() {
 
     const timer = setTimeout(() => {
       reportsApi
-        .list({
+        .list(appId, {
           type: typeFilter === "all" ? undefined : typeFilter,
           status: statusFilter === "all" ? undefined : statusFilter,
           search: trimmedQuery || undefined,
@@ -116,14 +118,14 @@ export function ReportsPage() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [typeFilter, statusFilter, trimmedQuery])
+  }, [appId, typeFilter, statusFilter, trimmedQuery])
 
   const refreshCounts = React.useCallback(() => {
     reportsApi
-      .counts()
+      .counts(appId)
       .then(setCounts)
       .catch(() => undefined)
-  }, [])
+  }, [appId])
 
   React.useEffect(() => {
     refreshCounts()
@@ -148,12 +150,12 @@ export function ReportsPage() {
       patch: Partial<Pick<SupportReport, "status" | "priority" | "assigneeId">>
     ) => {
       try {
-        applyServerReport(await reportsApi.update(reportId, patch))
+        applyServerReport(await reportsApi.update(appId, reportId, patch))
       } catch {
         toast.error("Could not update that ticket")
       }
     },
-    [applyServerReport]
+    [appId, applyServerReport]
   )
 
   const replyToReport = React.useCallback(
@@ -165,13 +167,15 @@ export function ReportsPage() {
       }
 
       try {
-        applyServerReport(await reportsApi.reply(reportId, { body: trimmed }))
+        applyServerReport(
+          await reportsApi.reply(appId, reportId, { body: trimmed })
+        )
         toast.success("Reply sent")
       } catch {
         toast.error("Could not send that reply")
       }
     },
-    [applyServerReport]
+    [appId, applyServerReport]
   )
 
   return (

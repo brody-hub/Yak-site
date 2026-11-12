@@ -52,6 +52,28 @@ export function TemporaryPasswordDialog({
     }
   }
 
+  // The admin console only receives a password when the invite email could
+  // not be sent, so an emailed invite has nothing to show.
+  if (!details.temporaryPassword) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Invite sent</DialogTitle>
+            <DialogDescription>
+              {`${details.userName} was emailed a temporary password at ${details.userEmail}. They will choose their own password when they sign in.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => onOpenChange(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
