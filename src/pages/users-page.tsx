@@ -155,6 +155,9 @@ export function UsersPage() {
                       <img
                         src={user.avatar}
                         alt=""
+                        // Avatar URLs come from the integrating app; do not
+                        // tell their host who is looking.
+                        referrerPolicy="no-referrer"
                         className="size-9 rounded-full bg-muted"
                       />
                       <div className="min-w-0 flex-1">
@@ -271,6 +274,7 @@ function UserDetailSheet({
                 <img
                   src={user.avatar}
                   alt=""
+                  referrerPolicy="no-referrer"
                   className="size-12 rounded-full bg-muted"
                 />
                 <div className="min-w-0">

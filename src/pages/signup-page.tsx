@@ -18,14 +18,14 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { ApiError, authApi, type PlanTierId, signupApi } from "@/lib/api"
 import { type BillingInterval, isCheckoutPlan } from "@/lib/plans"
-import { PASSWORD_MIN_LENGTH } from "@/pages/change-password-page"
 
 const PLAN_IDS: PlanTierId[] = ["free", "starter", "growth", "pro", "studio"]
 
 /**
- * Self-serve sign up. Creates the account on Free and emails a confirmation
- * link; a paid tier picked here is paid for through Stripe right after the
- * owner confirms and lands in the panel.
+ * Self-serve sign up. Creates the account on Free and emails a link to choose
+ * a password, which is also what confirms the email: the form itself never
+ * sets a password, so nobody can claim an inbox they do not read. A paid tier
+ * picked here is paid for through Stripe right after the owner first signs in.
  */
 export function SignupPage() {
   const { status } = useAuth()
@@ -43,7 +43,6 @@ export function SignupPage() {
   const [accountName, setAccountName] = React.useState("")
   const [name, setName] = React.useState("")
   const [email, setEmail] = React.useState("")
-  const [password, setPassword] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [sentTo, setSentTo] = React.useState<string | null>(null)
@@ -106,12 +105,6 @@ export function SignupPage() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
-
-    if (password.length < PASSWORD_MIN_LENGTH) {
-      setError(`Use a password of at least ${PASSWORD_MIN_LENGTH} characters.`)
-      return
-    }
-
     setSubmitting(true)
 
     try {
@@ -119,7 +112,6 @@ export function SignupPage() {
         accountName: accountName.trim(),
         name: name.trim(),
         email: email.trim(),
-        password,
         plan: submittedPlan,
         interval,
       })
@@ -209,21 +201,9 @@ export function SignupPage() {
                 placeholder="you@company.com"
               />
             </div>
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                minLength={PASSWORD_MIN_LENGTH}
-                autoComplete="new-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              <p className="text-muted-foreground text-xs">
-                At least {PASSWORD_MIN_LENGTH} characters.
-              </p>
-            </div>
+            <p className="text-muted-foreground text-sm sm:col-span-2">
+              We will email you a link to choose your password.
+            </p>
 
             {error ? (
               <p className="text-destructive text-sm sm:col-span-2" role="alert">
@@ -262,8 +242,9 @@ function CheckEmail({ email }: { email: string }) {
         <CardHeader>
           <CardTitle>Check your email</CardTitle>
           <CardDescription>
-            We sent a confirmation link to <strong>{email}</strong>. Open it
-            to finish setting up your account. The link works for 24 hours.
+            We sent a link to <strong>{email}</strong>. Open it to choose your
+            password and finish setting up your account. The link works for
+            one hour.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -271,7 +252,7 @@ function CheckEmail({ email }: { email: string }) {
             variant="outline"
             disabled={resent}
             onClick={() => {
-              void authApi.sendVerificationEmail(email).finally(() => {
+              void authApi.requestPasswordReset(email).finally(() => {
                 setResent(true)
               })
             }}
