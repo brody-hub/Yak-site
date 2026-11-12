@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/table"
 import {
   adminApi,
-  formatAdminDate,
+  formatAgo,
+  formatCount,
   planLabel,
   type AdminTenant,
 } from "@/lib/admin"
@@ -90,21 +91,22 @@ export function AccountsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
-                    <TableHead>Slug</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Plan</TableHead>
                     <TableHead>Owners</TableHead>
                     <TableHead className="text-right">Apps</TableHead>
-                    <TableHead className="text-right">Users</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Last active</TableHead>
+                    <TableHead className="text-right">Team</TableHead>
+                    <TableHead className="text-right">End users</TableHead>
+                    <TableHead className="text-right">Events this month</TableHead>
+                    <TableHead>Last event</TableHead>
+                    <TableHead>Last sign in</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
                     Array.from({ length: 3 }).map((_, index) => (
                       <TableRow key={index}>
-                        <TableCell colSpan={9}>
+                        <TableCell colSpan={10}>
                           <Skeleton className="h-8" />
                         </TableCell>
                       </TableRow>
@@ -112,7 +114,7 @@ export function AccountsPage() {
                   ) : error ? (
                     <TableRow>
                       <TableCell
-                        colSpan={9}
+                        colSpan={10}
                         className="py-8 text-center text-destructive"
                       >
                         {error}
@@ -121,7 +123,7 @@ export function AccountsPage() {
                   ) : tenants.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={9}
+                        colSpan={10}
                         className="py-8 text-center text-muted-foreground"
                       >
                         No accounts yet. Create the first one.
@@ -134,19 +136,26 @@ export function AccountsPage() {
                         className="cursor-pointer"
                         onClick={() => navigate(`/admin/accounts/${tenant.id}`)}
                       >
-                        <TableCell className="font-medium">
-                          {tenant.name}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {tenant.slug}
+                        <TableCell>
+                          <div className="font-medium">{tenant.name}</div>
+                          <div className="font-mono text-xs text-muted-foreground">
+                            {tenant.slug}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <TenantStatusBadge tenant={tenant} />
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary">
-                            {planLabel(tenant.plan)}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge variant="secondary">
+                              {planLabel(tenant.plan)}
+                            </Badge>
+                            {tenant.pendingPlan ? (
+                              <Badge variant="outline">
+                                Picked {planLabel(tenant.pendingPlan)}
+                              </Badge>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {tenant.owners.length > 0
@@ -161,11 +170,17 @@ export function AccountsPage() {
                         <TableCell className="text-right tabular-nums">
                           {tenant.userCount}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatAdminDate(tenant.createdAt)}
+                        <TableCell className="text-right tabular-nums">
+                          {formatCount(tenant.usage.syncedUsers)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatCount(tenant.usage.eventsThisMonth)}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {formatAdminDate(tenant.lastActiveAt)}
+                          {formatAgo(tenant.usage.lastEventAt)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatAgo(tenant.lastActiveAt)}
                         </TableCell>
                       </TableRow>
                     ))

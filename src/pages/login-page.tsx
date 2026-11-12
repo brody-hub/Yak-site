@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Navigate, useLocation } from "react-router-dom"
+import { Link, Navigate, useLocation } from "react-router-dom"
 
 import { useAuth } from "@/components/auth-provider"
 import { useBranding } from "@/components/branding-provider"
@@ -13,12 +13,15 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useAppConfig } from "@/hooks/use-app-config"
 import { ApiError, authApi } from "@/lib/api"
 
 export function LoginPage() {
   const { status, signIn } = useAuth()
   const location = useLocation()
   const branding = useBranding()
+  const { config } = useAppConfig()
+  const signUpEnabled = config?.signUpEnabled ?? false
 
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
@@ -26,6 +29,10 @@ export function LoginPage() {
   const [submitting, setSubmitting] = React.useState(false)
   const [mode, setMode] = React.useState<"sign-in" | "forgot">("sign-in")
   const [resetSent, setResetSent] = React.useState(false)
+  // Set when the email is right but not confirmed yet: signing in has just
+  // sent a fresh link, and the person can ask for another.
+  const [unverified, setUnverified] = React.useState(false)
+  const [verifyResent, setVerifyResent] = React.useState(false)
 
   if (status === "authenticated") {
     const from = (location.state as { from?: string } | null)?.from ?? "/"
@@ -35,11 +42,18 @@ export function LoginPage() {
   async function handleSignIn(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
+    setUnverified(false)
+    setVerifyResent(false)
     setSubmitting(true)
 
     try {
       await signIn(email.trim(), password)
     } catch (caught) {
+      if (caught instanceof ApiError && caught.code === "EMAIL_NOT_VERIFIED") {
+        setUnverified(true)
+        return
+      }
+
       setError(
         caught instanceof ApiError
           ? caught.message
@@ -90,7 +104,9 @@ export function LoginPage() {
               <CardHeader>
                 <CardTitle>Sign in</CardTitle>
                 <CardDescription>
-                  Use the email and password you were invited with.
+                  {signUpEnabled
+                    ? "Welcome back. Sign in to your account."
+                    : "Use the email and password you were invited with."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -124,6 +140,30 @@ export function LoginPage() {
                     <p className="text-destructive text-sm" role="alert">
                       {error}
                     </p>
+                  ) : null}
+
+                  {unverified ? (
+                    <div
+                      className="bg-muted/40 space-y-2 rounded-lg border p-3 text-sm"
+                      role="alert"
+                    >
+                      <p>
+                        Confirm your email first. We just sent a new link to{" "}
+                        <strong>{email.trim()}</strong>.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={verifyResent}
+                        className="text-muted-foreground hover:text-foreground underline underline-offset-4 disabled:no-underline"
+                        onClick={() => {
+                          void authApi
+                            .sendVerificationEmail(email.trim())
+                            .finally(() => setVerifyResent(true))
+                        }}
+                      >
+                        {verifyResent ? "Sent again" : "Send it again"}
+                      </button>
+                    </div>
                   ) : null}
 
                   <Button type="submit" disabled={submitting}>
@@ -201,9 +241,18 @@ export function LoginPage() {
           )}
         </Card>
 
-        <p className="text-muted-foreground mt-6 text-center text-xs">
-          Access is invite only. Ask an owner or admin for an account.
-        </p>
+        {signUpEnabled ? (
+          <p className="text-muted-foreground mt-6 text-center text-sm">
+            New here?{" "}
+            <Link to="/signup" className="text-foreground underline underline-offset-4">
+              Create an account
+            </Link>
+          </p>
+        ) : (
+          <p className="text-muted-foreground mt-6 text-center text-xs">
+            Access is invite only. Ask an owner or admin for an account.
+          </p>
+        )}
       </div>
     </div>
   )

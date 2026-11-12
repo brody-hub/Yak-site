@@ -341,12 +341,57 @@ export type BillingSummary = {
     suggestedPlanId: PlanTierId
   }
   hasPaymentMethod: boolean
+  /** Stripe holds this account's billing; changes go through its portal. */
+  hasSubscription: boolean
+  subscriptionStatus: string | null
+  /** A paid tier picked at sign up and not yet paid for. */
+  pendingPlan: PlanTierId | null
+  pendingInterval: "monthly" | "annual" | null
   /** False until Stripe is connected on the server. */
   paymentsEnabled: boolean
 }
 
 export const billingApi = {
   get: () => get<BillingSummary>("/api/billing"),
+
+  /** A Stripe Checkout URL. With no plan, continues the one picked at sign up. */
+  checkout: async (body: { plan?: PlanTierId; interval?: "monthly" | "annual" } = {}) =>
+    (
+      await request<{ url: string }>("/api/billing/checkout", {
+        method: "POST",
+        body,
+      })
+    ).data.url,
+
+  /** Stripe's customer portal, to change tier, update the card or cancel. */
+  portal: async () =>
+    (await request<{ url: string }>("/api/billing/portal", { method: "POST" }))
+      .data.url,
+
+  /** Stays on Free instead of the tier picked at sign up. */
+  dismissPending: async () => {
+    await request<{ ok: true }>("/api/billing/pending", { method: "DELETE" })
+  },
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sign up                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export type SignupInput = {
+  accountName: string
+  name: string
+  email: string
+  password: string
+  plan: PlanTierId
+  interval: "monthly" | "annual"
+}
+
+export const signupApi = {
+  /** Creates the account; nobody is signed in until the email is confirmed. */
+  create: async (input: SignupInput) =>
+    (await request<{ email: string }>("/api/signup", { method: "POST", body: input }))
+      .data,
 }
 
 /* -------------------------------------------------------------------------- */
@@ -357,7 +402,10 @@ export type AppConfig = {
   tenantName: string
   tenantSlug: string | null
   signUpEnabled: boolean
+  /** Whether paid tiers can be bought online. */
+  paymentsEnabled: boolean
   passwordMinLength: number
+  plans: BillingPlan[]
   branding: {
     brandName: string
     logoUrl: string | null
@@ -429,6 +477,42 @@ export const authApi = {
         redirectTo: `${window.location.origin}/reset-password`,
       }),
     })
+  },
+
+  /** Sends a fresh confirmation link; answers the same whoever asks. */
+  async sendVerificationEmail(email: string) {
+    await fetch(`${API_URL}/api/auth/send-verification-email`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    })
+  },
+
+  /**
+   * Confirms the email from a sign up link and signs the person in. Called
+   * from the panel rather than opened on the API host, so the session cookie
+   * lands where the panel's own requests will send it.
+   */
+  async verifyEmail(token: string) {
+    const response = await fetch(
+      `${API_URL}/api/auth/verify-email?token=${encodeURIComponent(token)}`,
+      { credentials: "include" }
+    )
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        code?: string
+      } | null
+
+      throw new ApiError(
+        response.status,
+        payload?.code ?? "verify_failed",
+        payload?.code === "TOKEN_EXPIRED"
+          ? "This link has expired. Sign in to get a new one."
+          : "This link is not valid. Sign in to get a new one."
+      )
+    }
   },
 
   async resetPassword(token: string, newPassword: string) {

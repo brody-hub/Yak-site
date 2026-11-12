@@ -14,8 +14,28 @@ import {
 export type TenantStatus = "active" | "suspended"
 
 /**
- * An account as staff see it: who runs it and what it is set up with. The
- * apps carry name and status only; what those apps send is never shown here.
+ * How much an app (or a whole account) uses Yak: counts and timestamps only.
+ * The server aggregates these in the database; staff never receive a row of
+ * what an app sent or who its users are.
+ */
+export type AdminUsage = {
+  syncedUsers: number
+  eventsTotal: number
+  eventsThisMonth: number
+  /** Distinct end users with an event this calendar month (UTC). */
+  activeUsersThisMonth: number
+  lastEventAt: string | null
+  reportsTotal: number
+  reportsOpen: number
+  reportsThisMonth: number
+  activeApiKeys: number
+  apiKeyLastUsedAt: string | null
+  integrations: string[]
+}
+
+/**
+ * An account as staff see it: who runs it, what it is set up with, and how
+ * much it is used. What its apps send is never shown here.
  */
 export type AdminTenant = {
   id: string
@@ -23,14 +43,21 @@ export type AdminTenant = {
   slug: string
   status: TenantStatus
   plan: PlanTierId
+  /** Stripe's status when the account pays through Stripe. */
+  subscriptionStatus: string | null
+  /** A paid tier picked at sign up and not yet paid for. */
+  pendingPlan: PlanTierId | null
+  signupSource: "admin" | "self_serve"
   suspendedAt: string | null
   suspendedReason: string | null
   createdAt: string
   userCount: number
   appCount: number
-  apps: { id: string; name: string; status: AppStatus }[]
+  apps: { id: string; name: string; status: AppStatus; usage: AdminUsage }[]
   owners: { id: string; name: string; email: string }[]
+  /** The most recent panel sign in by anyone on the account's team. */
   lastActiveAt: string | null
+  usage: AdminUsage
 }
 
 export const PLAN_TIERS: { id: PlanTierId; label: string }[] = [
@@ -176,6 +203,35 @@ export const adminApi = {
     request<{ ok: true }>(`/api/admin/super-admins/${id}`, {
       method: "DELETE",
     }),
+}
+
+export function formatCount(value: number) {
+  return new Intl.NumberFormat().format(value)
+}
+
+/** "3 hours ago", "12 days ago", or "Never". */
+export function formatAgo(value: string | null) {
+  if (!value) {
+    return "Never"
+  }
+
+  const seconds = (new Date(value).getTime() - Date.now()) / 1000
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 31_536_000],
+    ["month", 2_592_000],
+    ["day", 86_400],
+    ["hour", 3_600],
+    ["minute", 60],
+  ]
+  const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
+
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) {
+      return format.format(Math.round(seconds / size), unit)
+    }
+  }
+
+  return "Just now"
 }
 
 export function formatAdminDate(value: string | null) {
