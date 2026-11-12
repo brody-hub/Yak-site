@@ -382,13 +382,12 @@ export type SignupInput = {
   accountName: string
   name: string
   email: string
-  password: string
   plan: PlanTierId
   interval: "monthly" | "annual"
 }
 
 export const signupApi = {
-  /** Creates the account; nobody is signed in until the email is confirmed. */
+  /** Creates the account; its owner chooses a password from the emailed link. */
   create: async (input: SignupInput) =>
     (await request<{ email: string }>("/api/signup", { method: "POST", body: input }))
       .data,
@@ -477,42 +476,6 @@ export const authApi = {
         redirectTo: `${window.location.origin}/reset-password`,
       }),
     })
-  },
-
-  /** Sends a fresh confirmation link; answers the same whoever asks. */
-  async sendVerificationEmail(email: string) {
-    await fetch(`${API_URL}/api/auth/send-verification-email`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    })
-  },
-
-  /**
-   * Confirms the email from a sign up link and signs the person in. Called
-   * from the panel rather than opened on the API host, so the session cookie
-   * lands where the panel's own requests will send it.
-   */
-  async verifyEmail(token: string) {
-    const response = await fetch(
-      `${API_URL}/api/auth/verify-email?token=${encodeURIComponent(token)}`,
-      { credentials: "include" }
-    )
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as {
-        code?: string
-      } | null
-
-      throw new ApiError(
-        response.status,
-        payload?.code ?? "verify_failed",
-        payload?.code === "TOKEN_EXPIRED"
-          ? "This link has expired. Sign in to get a new one."
-          : "This link is not valid. Sign in to get a new one."
-      )
-    }
   },
 
   async resetPassword(token: string, newPassword: string) {

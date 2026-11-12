@@ -14,11 +14,16 @@ import { Label } from "@/components/ui/label"
 import { ApiError, authApi } from "@/lib/api"
 import { PASSWORD_MIN_LENGTH } from "@/pages/change-password-page"
 
-/** Landing page for the link in a password reset email. */
+/**
+ * Landing page for the link in a password reset email, and for the last step
+ * of sign up (`welcome=1`), where choosing the password is what confirms the
+ * new owner's email.
+ */
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const token = searchParams.get("token")
+  const welcome = searchParams.get("welcome") === "1"
 
   const [newPassword, setNewPassword] = React.useState("")
   const [confirmPassword, setConfirmPassword] = React.useState("")
@@ -67,10 +72,14 @@ export function ResetPasswordPage() {
       <div className="w-full max-w-sm">
         <Card>
           <CardHeader>
-            <CardTitle>Set a new password</CardTitle>
+            <CardTitle>
+              {welcome ? "Finish creating your account" : "Set a new password"}
+            </CardTitle>
             <CardDescription>
               {done
-                ? "Your password has been updated."
+                ? welcome
+                  ? "Your account is ready. Sign in with your new password."
+                  : "Your password has been updated."
                 : "Choose the password you will use to sign in."}
             </CardDescription>
           </CardHeader>

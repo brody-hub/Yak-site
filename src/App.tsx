@@ -39,7 +39,6 @@ import { MarketingPage } from "@/pages/marketing-page"
 import { ReportsPage } from "@/pages/reports-page"
 import { ResetPasswordPage } from "@/pages/reset-password-page"
 import { SignupPage } from "@/pages/signup-page"
-import { VerifyEmailPage } from "@/pages/verify-email-page"
 import { TasksPage } from "@/pages/tasks-page"
 import { SystemUserDetailPage } from "@/pages/system-user-detail-page"
 import { DiscordWebhooksPage } from "@/pages/discord-webhooks-page"
@@ -104,7 +103,6 @@ export function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/signup" element={<SignupPage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
 
             <Route element={<RequireAuth />}>
               {/* Super admin console. Yak staff only; no customer data. */}

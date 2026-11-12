@@ -29,10 +29,6 @@ export function LoginPage() {
   const [submitting, setSubmitting] = React.useState(false)
   const [mode, setMode] = React.useState<"sign-in" | "forgot">("sign-in")
   const [resetSent, setResetSent] = React.useState(false)
-  // Set when the email is right but not confirmed yet: signing in has just
-  // sent a fresh link, and the person can ask for another.
-  const [unverified, setUnverified] = React.useState(false)
-  const [verifyResent, setVerifyResent] = React.useState(false)
 
   if (status === "authenticated") {
     const from = (location.state as { from?: string } | null)?.from ?? "/"
@@ -42,18 +38,11 @@ export function LoginPage() {
   async function handleSignIn(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
-    setUnverified(false)
-    setVerifyResent(false)
     setSubmitting(true)
 
     try {
       await signIn(email.trim(), password)
     } catch (caught) {
-      if (caught instanceof ApiError && caught.code === "EMAIL_NOT_VERIFIED") {
-        setUnverified(true)
-        return
-      }
-
       setError(
         caught instanceof ApiError
           ? caught.message
@@ -140,30 +129,6 @@ export function LoginPage() {
                     <p className="text-destructive text-sm" role="alert">
                       {error}
                     </p>
-                  ) : null}
-
-                  {unverified ? (
-                    <div
-                      className="bg-muted/40 space-y-2 rounded-lg border p-3 text-sm"
-                      role="alert"
-                    >
-                      <p>
-                        Confirm your email first. We just sent a new link to{" "}
-                        <strong>{email.trim()}</strong>.
-                      </p>
-                      <button
-                        type="button"
-                        disabled={verifyResent}
-                        className="text-muted-foreground hover:text-foreground underline underline-offset-4 disabled:no-underline"
-                        onClick={() => {
-                          void authApi
-                            .sendVerificationEmail(email.trim())
-                            .finally(() => setVerifyResent(true))
-                        }}
-                      >
-                        {verifyResent ? "Sent again" : "Send it again"}
-                      </button>
-                    </div>
                   ) : null}
 
                   <Button type="submit" disabled={submitting}>
